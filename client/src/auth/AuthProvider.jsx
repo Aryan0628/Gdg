@@ -7,7 +7,7 @@ const AuthProvider = ({ children }) => {
   const onRedirectCallback = (appState) => {
     navigate(appState?.returnTo || "/dashboard");
   };
-
+  console.log(import.meta.env.VITE_AUTH0_AUDIENCE);
   return (
     <Auth0Provider
       domain={import.meta.env.VITE_AUTH0_DOMAIN}
