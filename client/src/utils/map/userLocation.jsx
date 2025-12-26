@@ -6,8 +6,8 @@ const containerStyle = {
 };
 
 const center = {
-  lat: 28.6139, // New Delhi
-  lng: 77.2090,
+  lat: 28.6139, 
+  lng: 78.2090,
 };
 
 export default function Map() {
