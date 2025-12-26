@@ -1,19 +1,30 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import Login from "../auth/Login";
 
+import FloatingLines from '../ui/FloatingLines';
+
+
+
 export default function Home() {
   const { loginWithRedirect } = useAuth0(); 
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden text-white bg-black font-sans">
-      {/* Background Image Layer */}
-      <div 
-        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/background.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-black/60"></div>
-      </div>
+      {/* Background Image Layer */}  
 
+      <div style={{ width: '100%', height: '600px', position: 'relative' }}>
+  <FloatingLines 
+    enabledWaves={['top', 'middle', 'bottom']}
+    // Array - specify line count per wave; Number - same count for all waves
+    lineCount={[10, 15, 20]}
+    // Array - specify line distance per wave; Number - same distance for all waves
+    lineDistance={[8, 6, 4]}
+    bendRadius={5.0}
+    bendStrength={-0.5}
+    interactive={true}
+    parallax={true}
+  />
+</div>
       <div className="relative z-10 flex min-h-screen flex-col">
         {/* Navbar */}
         <nav className="flex items-center justify-between px-10 py-6">
