@@ -3,76 +3,27 @@ import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
 import {
   MapPin,
-  Shield,
-  Car,
-  Trash2,
-  Heart,
-  Briefcase,
   Navigation,
   X,
 } from "lucide-react"
-import { useAuth0 } from "@auth0/auth0-react";
-import { useAuthStore } from "../store/useAuthStore";
-import Logout from "../auth/Logout";
+import { useAuth0 } from "@auth0/auth0-react"
+import { useAuthStore } from "../store/useAuthStore"
 import GoogleMapComponent from "../components/google-map"
 import FeaturePanel from "../components/feature-panel"
-import {SafetyOnboarding} from "../components/safety-onboarding"
+import { SafetyOnboarding } from "../components/safety-onboarding"
+
+// ✅ NEW: import features from config
+import { FEATURES } from "./features.config"
+
 export default function CivicHub() {
   const [selectedFeature, setSelectedFeature] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [locationPermission, setLocationPermission] = useState("prompt")
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const [hasJoined, setHasJoined] = useState(false)
-  const { user } = useAuth0();
-  const storedUser = useAuthStore((s) => s.user);
 
-  const features = [
-    {
-      id: "women-safety",
-      title: "Women Safety",
-      description: "Report safety concerns and get emergency assistance",
-      icon: Shield,
-      color: "text-red-500",
-      bgColor: "bg-red-500/10",
-      stats: "24/7 Emergency Support",
-    },
-    {
-      id: "traffic",
-      title: "Traffic",
-      description: "Report accidents, congestion, and road issues",
-      icon: Car,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-      stats: "Live Traffic Updates",
-    },
-    {
-      id: "garbage",
-      title: "Garbage",
-      description: "Report waste management and cleanliness issues",
-      icon: Trash2,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-      stats: "Daily Collection Routes",
-    },
-    {
-      id: "ngo",
-      title: "NGO",
-      description: "Connect with NGOs and volunteer opportunities",
-      icon: Heart,
-      color: "text-pink-500",
-      bgColor: "bg-pink-500/10",
-      stats: "50+ Partner Organizations",
-    },
-    {
-      id: "jobs",
-      title: "Jobs",
-      description: "Find local employment and career opportunities",
-      icon: Briefcase,
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-      stats: "100+ Active Listings",
-    },
-  ]
+  const { user } = useAuth0()
+  const storedUser = useAuthStore((s) => s.user)
 
   const requestLocation = async () => {
     setIsLoadingLocation(true)
@@ -108,7 +59,7 @@ export default function CivicHub() {
     setHasJoined(true)
   }
 
-  const currentFeature = features.find((f) => f.id === selectedFeature)
+  const currentFeature = FEATURES.find((f) => f.id === selectedFeature)
   const needsOnboarding =
     selectedFeature === "women-safety" || selectedFeature === "traffic"
 
@@ -165,7 +116,7 @@ export default function CivicHub() {
                   : "md:grid-cols-2 lg:grid-cols-3"
               }`}
             >
-              {features.map((feature) => {
+              {FEATURES.map((feature) => {
                 const Icon = feature.icon
                 const isSelected = feature.id === selectedFeature
 
