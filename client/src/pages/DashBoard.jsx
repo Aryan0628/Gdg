@@ -1,6 +1,8 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { useAuthStore } from "../store/useAuthStore";
 import Logout from "../auth/Logout";
+import Map from "../utils/map/userLocation";
+
 import axios from "axios";
 import { useEffect } from "react";
 export default function Dashboard() {
@@ -20,6 +22,7 @@ export default function Dashboard() {
 
       <h3>Auth0 User</h3>
       <pre>{JSON.stringify(user, null, 2)}</pre>
+      <Map />
 
       <h3>Stored User (Zustand)</h3>
       <pre>{JSON.stringify(storedUser, null, 2)}</pre>
