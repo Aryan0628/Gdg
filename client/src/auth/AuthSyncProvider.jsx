@@ -21,15 +21,14 @@ export default function AuthSyncProvider({ children }) {
         });
         console.log(token);
         await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/api/auth/sync-user`,
+          '/api/auth/sync-user',
           {},
           {
-            headers: {
+              headers: {
               Authorization: `Bearer ${token}`,
             },
           }
-        );
-
+      );
         setUser(user);
         console.log(user);
         hasSynced.current = true;
