@@ -11,17 +11,20 @@ import {
   Navigation,
   X,
 } from "lucide-react"
-
+import { useAuth0 } from "@auth0/auth0-react";
+import { useAuthStore } from "../store/useAuthStore";
+import Logout from "../auth/Logout";
 import GoogleMapComponent from "../components/google-map"
 import FeaturePanel from "../components/feature-panel"
 import {SafetyOnboarding} from "../components/safety-onboarding"
-
 export default function CivicHub() {
   const [selectedFeature, setSelectedFeature] = useState(null)
   const [userLocation, setUserLocation] = useState(null)
   const [locationPermission, setLocationPermission] = useState("prompt")
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const [hasJoined, setHasJoined] = useState(false)
+  const { user } = useAuth0();
+  const storedUser = useAuthStore((s) => s.user);
 
   const features = [
     {

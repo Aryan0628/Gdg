@@ -8,11 +8,6 @@ import { useEffect } from "react";
 export default function Dashboard() {
   const { user } = useAuth0();
   const storedUser = useAuthStore((s) => s.user);
-
-  const fetchData = async () => {
-    const res=await axios.get("/api/me",{withCredentials:true});
-    console.log(res);
-  }
   useEffect(() => {
     fetchData();
   }, []);
