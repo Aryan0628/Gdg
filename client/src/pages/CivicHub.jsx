@@ -12,7 +12,7 @@ import GoogleMapComponent from "../components/google-map"
 import FeaturePanel from "../components/feature-panel"
 import { SafetyOnboarding } from "../components/safety-onboarding"
 
-// ✅ NEW: import features from config
+
 import { FEATURES } from "./features.config"
 
 export default function CivicHub() {

@@ -1,5 +1,7 @@
 import admin from "firebase-admin";
-import serviceAccount from "../../serviceAccountKey.json" assert { type: "json" };
+import { createRequire } from "module";
+const req = createRequire(import.meta.url);
+const serviceAccount = req("../../serviceAccountKey.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
