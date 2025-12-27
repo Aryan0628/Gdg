@@ -1,67 +1,33 @@
-import { useState } from "react"
-import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
-import {
-  MapPin,
-  Navigation,
-  X,
-} from "lucide-react"
+import { MapPin, Navigation } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import React, { useEffect } from "react"
 import { useAuth0 } from "@auth0/auth0-react"
 import { useAuthStore } from "../store/useAuthStore"
-import GoogleMapComponent from "../components/google-map"
-import FeaturePanel from "../components/feature-panel"
-import { SafetyOnboarding } from "../components/safety-onboarding"
-
-// ✅ NEW: import features from config
 import { FEATURES } from "./features.config"
 
 export default function CivicHub() {
-  const [selectedFeature, setSelectedFeature] = useState(null)
-  const [userLocation, setUserLocation] = useState(null)
-  const [locationPermission, setLocationPermission] = useState("prompt")
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false)
-  const [hasJoined, setHasJoined] = useState(false)
+  const navigate = useNavigate()
+  const { user: auth0User } = useAuth0()
+  const { setUser, user: storedUser } = useAuthStore()
 
-  const { user } = useAuth0()
-  const storedUser = useAuthStore((s) => s.user)
-
-  const requestLocation = async () => {
-    setIsLoadingLocation(true)
-    try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject)
-      })
-
-      setUserLocation({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      })
-      setLocationPermission("granted")
-    } catch (error) {
-      console.error("Location permission denied:", error)
-      setLocationPermission("denied")
-    } finally {
-      setIsLoadingLocation(false)
+  // Save Auth0 user to Zustand store when it becomes available
+  React.useEffect(() => {
+    if (auth0User && !storedUser) {
+      setUser(auth0User)
     }
-  }
+  }, [auth0User, storedUser, setUser])
 
+  const featureRoutes = {
+    "women-safety": "/women",
+    "traffic": "/traffic",
+    "garbage": "/garbage",
+    "ngo": "/ngo",
+    "jobs": "/jobs",
+  }
   const handleFeatureClick = (featureId) => {
-    setSelectedFeature(featureId)
-    setHasJoined(false)
-
-    if (featureId !== "women-safety" && featureId !== "traffic") {
-      setUserLocation(null)
-      setLocationPermission("prompt")
-    }
+    navigate(featureRoutes[featureId])
   }
-
-  const handleJoinComplete = () => {
-    setHasJoined(true)
-  }
-
-  const currentFeature = FEATURES.find((f) => f.id === selectedFeature)
-  const needsOnboarding =
-    selectedFeature === "women-safety" || selectedFeature === "traffic"
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
@@ -79,56 +45,32 @@ export default function CivicHub() {
               </p>
             </div>
           </div>
-
-          {userLocation && (
-            <Badge className="gap-2 bg-green-600 text-white border-0">
-              <Navigation className="h-3 w-3" />
-              Location Active
-            </Badge>
-          )}
         </div>
       </header>
 
       {/* BODY */}
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL */}
-        <div
-          className={`${
-            selectedFeature ? "w-96" : "flex-1"
-          } overflow-y-auto transition-all duration-300 border-r border-zinc-800 bg-zinc-900`}
-        >
+        {/* MAIN PANEL */}
+        <div className="flex-1 overflow-y-auto bg-zinc-900">
           <div className="p-6 space-y-4">
-            {!selectedFeature && (
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-white">
-                  Select a Service
-                </h2>
-                <p className="text-zinc-400">
-                  Choose a service to view on the map
-                </p>
-              </div>
-            )}
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white">
+                Select a Service
+              </h2>
+              <p className="text-zinc-400">
+                Choose a service to view on the map
+              </p>
+            </div>
 
-            <div
-              className={`grid gap-3 ${
-                selectedFeature
-                  ? "grid-cols-1"
-                  : "md:grid-cols-2 lg:grid-cols-3"
-              }`}
-            >
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {FEATURES.map((feature) => {
                 const Icon = feature.icon
-                const isSelected = feature.id === selectedFeature
 
                 return (
                   <button
                     key={feature.id}
                     onClick={() => handleFeatureClick(feature.id)}
-                    className={`rounded-xl p-4 text-left transition-all ${
-                      isSelected
-                        ? "bg-zinc-800 border-2 border-blue-500"
-                        : "bg-zinc-800/50 border border-zinc-700 hover:bg-zinc-800 hover:scale-105"
-                    }`}
+                    className="rounded-xl p-4 text-left transition-all bg-zinc-800/50 border border-zinc-700 hover:bg-zinc-800 hover:scale-105"
                   >
                     <div className="flex items-center gap-3">
                       <div
@@ -140,65 +82,17 @@ export default function CivicHub() {
                         <h3 className="text-white font-semibold">
                           {feature.title}
                         </h3>
-                        {!selectedFeature && (
-                          <p className="text-xs text-zinc-400">
-                            {feature.description}
-                          </p>
-                        )}
+                        <p className="text-xs text-zinc-400">
+                          {feature.description}
+                        </p>
                       </div>
                     </div>
                   </button>
                 )
               })}
             </div>
-
-            {selectedFeature && currentFeature && (
-              <div className="pt-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedFeature(null)
-                    setHasJoined(false)
-                  }}
-                  className="mb-4 text-zinc-400 hover:text-white"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Close Map View
-                </Button>
-
-                {needsOnboarding && !hasJoined ? (
-                  <SafetyOnboarding
-                    feature={currentFeature}
-                    userLocation={userLocation}
-                    isLoadingLocation={isLoadingLocation}
-                    onRequestLocation={requestLocation}
-                    onJoinComplete={handleJoinComplete}
-                  />
-                ) : (
-                  <FeaturePanel
-                    feature={currentFeature}
-                    userLocation={userLocation}
-                    isLoadingLocation={isLoadingLocation}
-                    onRequestLocation={requestLocation}
-                  />
-                )}
-              </div>
-            )}
           </div>
         </div>
-
-        {/* MAP */}
-        {selectedFeature &&
-          ((needsOnboarding && hasJoined) || !needsOnboarding) && (
-            <div className="flex-1 relative">
-              <GoogleMapComponent
-                userLocation={userLocation}
-                selectedFeature={selectedFeature}
-                isLoadingLocation={isLoadingLocation}
-              />
-            </div>
-          )}
       </div>
     </div>
   )
