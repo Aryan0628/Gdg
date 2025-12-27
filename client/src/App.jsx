@@ -10,7 +10,7 @@ function App() {
       <Route path="/" element={<Home />} />
 
       <Route
-        path="/dashboard"
+        path="/test"
         element={
           <ProtectedRoute>
             <Dashboard />
@@ -19,7 +19,7 @@ function App() {
       />
 
       <Route
-        path="/civic-hub"
+        path="/dashboard"
         element={
           <ProtectedRoute>
             <CivicHub />

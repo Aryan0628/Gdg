@@ -119,7 +119,7 @@ export default function CivicHub() {
               <MapPin className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">CivicHub</h1>
+              <h1 className="text-xl font-bold text-white">UrbanFlow</h1>
               <p className="text-xs text-zinc-400">
                 Community Safety Dashboard
               </p>
