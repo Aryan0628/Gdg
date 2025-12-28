@@ -1,20 +1,20 @@
 import { useState } from "react"
 import { Button } from "../../../ui/button"
 import { Badge } from "../../../ui/badge"
-import { Navigation, X, ArrowLeft } from "lucide-react"
+import { Navigation, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+
 import GoogleMapComponent from "../../../components/google-map"
-import FeaturePanel from "../../../components/feature-panel"
+import NgoPortal from "../../../components/ngo-portal"
 import { NGO_FEATURE } from "./config"
 
 export default function NGOPage() {
   const [userLocation, setUserLocation] = useState(null)
-  const [locationPermission, setLocationPermission] = useState("prompt")
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
-  const navigate = useNavigate()
+  const [showMap, setShowMap] = useState(false)
 
+  const navigate = useNavigate()
   const feature = NGO_FEATURE
-  const needsOnboarding = false
 
   const requestLocation = async () => {
     setIsLoadingLocation(true)
@@ -27,10 +27,9 @@ export default function NGOPage() {
         lat: position.coords.latitude,
         lng: position.coords.longitude,
       })
-      setLocationPermission("granted")
     } catch (error) {
       console.error("Location permission denied:", error)
-      setLocationPermission("denied")
+      alert("Please allow location access")
     } finally {
       setIsLoadingLocation(false)
     }
@@ -50,13 +49,15 @@ export default function NGOPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="h-10 w-10 rounded-lg bg-blue-600 flex items-center justify-center">
+
+            <div className="h-10 w-10 rounded-lg bg-pink-600 flex items-center justify-center">
               <feature.icon className="h-6 w-6 text-white" />
             </div>
+
             <div>
-              <h1 className="text-xl font-bold text-white">UrbanFlow</h1>
+              <h1 className="text-xl font-bold text-white">NGO Portal</h1>
               <p className="text-xs text-zinc-400">
-                Community Safety Dashboard
+                Community Support & Volunteering
               </p>
             </div>
           </div>
@@ -72,42 +73,29 @@ export default function NGOPage() {
 
       {/* BODY */}
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL */}
-        <div className="w-96 overflow-y-auto border-r border-zinc-800 bg-zinc-900">
-          <div className="p-6 space-y-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                navigate("/dashboard")
-              }}
-              className="mb-4 text-zinc-400 hover:text-white"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Close Map View
-            </Button>
-
-            {needsOnboarding ? null : (
-              <FeaturePanel
-                feature={feature}
-                userLocation={userLocation}
-                isLoadingLocation={isLoadingLocation}
-                onRequestLocation={requestLocation}
-              />
-            )}
+        {/* LEFT PANEL — NGO PORTAL */}
+        <div className="w-[420px] overflow-y-auto border-r border-zinc-800 bg-zinc-900">
+          <div className="p-6">
+            <NgoPortal
+              userLocation={userLocation}
+              isLoadingLocation={isLoadingLocation}
+              onRequestLocation={requestLocation}
+              onLocationUpdate={setUserLocation}
+              onMapVisibilityChange={setShowMap}
+            />
           </div>
         </div>
 
-        {/* MAP */}
-        {!needsOnboarding ? (
-          <div className="flex-1 relative">
+        {/* RIGHT PANEL — MAP */}
+        <div className="flex-1 relative">
+          {showMap && userLocation && (
             <GoogleMapComponent
               userLocation={userLocation}
               selectedFeature={feature.id}
               isLoadingLocation={isLoadingLocation}
             />
-          </div>
-        ) : null}
+          )}
+        </div>
       </div>
     </div>
   )
