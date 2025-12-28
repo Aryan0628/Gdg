@@ -14,6 +14,7 @@ router.post("/room_data", async (req, res) => {
         error: "roomId and userId are required" 
       });
     }
+    console.log(roomId);
 
     const roomRef = db.collection("women").doc("rooms").collection(roomId).doc("metadata");
     const roomSnap = await roomRef.get();
@@ -36,7 +37,7 @@ router.post("/room_data", async (req, res) => {
         .collection(roomId)
         .doc("messages");
 
-      await messagesRef.update({
+      await messagesRef.set({
         messages: admin.firestore.FieldValue.arrayUnion({
           userId,
           text: message,
@@ -44,7 +45,7 @@ router.post("/room_data", async (req, res) => {
         }),
       });
     }
-
+    console.log("Added in Database");
     return res.status(200).json({
       success: true,
       roomId,
