@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { Button } from "../../ui/button"
+import { Button } from "../../../ui/button";
 import axios from "axios"
-import { useAuthStore } from "../../store/useAuthStore.js"
+import { useAuthStore } from "../../../store/useAuthStore.js"
 import { useAuth0 } from "@auth0/auth0-react";
 
 

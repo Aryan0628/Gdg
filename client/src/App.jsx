@@ -10,8 +10,8 @@ import Jobs from "./pages/features/jobs";
 import Mission from "./pages/Mission";
 import AboutUs from "./pages/AboutUs";
 import Navbar from "./components/Navbar";
+import GarbageFeature from "./pages/features/garbage/Garbage"
 
-import GarbageFeature from "./pages/Garbage/Garbage"
 function App() {
   const location = useLocation();
 
@@ -54,7 +54,7 @@ function App() {
         path="/garbage"
         element={
           <ProtectedRoute>
-            <Garbage />
+            <GarbageFeature />
           </ProtectedRoute>
         }
       />

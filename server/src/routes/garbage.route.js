@@ -95,4 +95,104 @@ router.get("/nearby", checkJwt, async (req, res) => {
   }
 });
 
+router.patch("/vote", checkJwt, async (req, res) => {
+  try {
+    const userId = req.auth.payload.sub; 
+    console.log(userId);
+    const { reportId, type } = req.body;
+
+    if (!reportId || !["UP", "DOWN"].includes(type)) {
+      return res.status(400).json({ message: "Invalid payload" });
+    }
+
+    const reportRef = db.collection("garbageReports").doc(reportId);
+    const reportSnap = await reportRef.get();
+
+    if (!reportSnap.exists) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
+    const report = reportSnap.data();
+    const votes = report.votes || {};
+
+    const previousVote = votes[userId];
+
+    let upvotes = report.upvotes || 0;
+    let downvotes = report.downvotes || 0;
+
+    
+    if (!previousVote) {
+      // first vote
+      votes[userId] = type;
+      type === "UP" ? upvotes++ : downvotes++;
+    } else if (previousVote === type) {
+      
+      delete votes[userId];
+      type === "UP" ? upvotes-- : downvotes--;
+    } else {
+     
+      votes[userId] = type;
+      previousVote === "UP" ? upvotes-- : downvotes--;
+      type === "UP" ? upvotes++ : downvotes++;
+    }
+
+    await reportRef.update({
+      votes,
+      upvotes,
+      downvotes,
+      updatedAt: new Date(),
+    });
+
+    return res.json({
+      success: true,
+      upvotes,
+      downvotes,
+      userVote: votes[userId] || null,
+    });
+  } catch (err) {
+    console.error("Vote error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+router.patch("/toggle-type", checkJwt, async (req, res) => {
+  const { reportId, type } = req.body;
+
+  if (!["GARBAGE", "DUSTBIN"].includes(type)) {
+    return res.status(400).json({ message: "Invalid type" });
+  }
+
+  const ref = db.collection("garbageReports").doc(reportId);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    return res.status(404).json({ message: "Report not found" });
+  }
+
+  await ref.update({
+    type,
+    updatedAt: new Date(),
+  });
+
+  res.json({ success: true, type });
+});
+router.delete("/:reportId", checkJwt, async (req, res) => {
+  const { reportId } = req.params;
+  const userId = req.auth.payload.sub;
+
+  const ref = db.collection("garbageReports").doc(reportId);
+  const snap = await ref.get();
+
+  if (!snap.exists) {
+    return res.status(404).json({ message: "Not found" });
+  }
+
+  if (snap.data().userId !== userId) {
+    return res.status(403).json({ message: "Not allowed" });
+  }
+
+  await ref.delete();
+
+  res.json({ success: true });
+});
+
 export default router

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Button } from "../../ui/button";
+import { Button } from "../../../ui/button";
 import { MapPin, Loader2 } from "lucide-react";
 import GarbageMap from "./GarbageMap";
 import GarbageUpload from "./GarbageUpload";
 import axios from "axios";
+import MyComplaints from "./MyComplaints";
 
 import { useAuth0 } from "@auth0/auth0-react";
-
+import { useAuthStore } from "../../../store/useAuthStore";
 
 export default function GarbageFeature() {
   const { getAccessTokenSilently } = useAuth0();
@@ -15,6 +16,38 @@ export default function GarbageFeature() {
 
   const [reports, setReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
+  const user = useAuthStore((state) => state.user);
+
+const myReports = reports.filter(
+  (r) => r.userId === user?.sub
+);
+const handleDeleteReport = async (reportId) => {
+  const token = await getAccessTokenSilently({
+    audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+  });
+
+  try {
+    await axios.delete(`/api/garbage/${reportId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    // remove from state
+    setReports((prev) =>
+      prev.filter((r) => r.id !== reportId)
+    );
+
+    // close info window if needed
+    setSelectedReport((prev) =>
+      prev?.id === reportId ? null : prev
+    );
+  } catch (err) {
+    console.error("Delete failed", err);
+    alert("Failed to delete report");
+  }
+};
+
 
   const requestLocation = async () => {
     setIsLoadingLocation(true);
@@ -38,19 +71,70 @@ export default function GarbageFeature() {
   const addReport = (report) => {
     setReports((prev) => [...prev, report]);
   };
+  const handleVote = async (reportId, type) => {
+  const token = await getAccessTokenSilently({
+    audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+  });
 
-  const vote = (id, type) => {
+  try {
+    const res = await axios.patch(
+      "/api/garbage/vote",
+      { reportId, type },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const { upvotes, downvotes, userVote } = res.data;
+
+    // ✅ Update reports list
     setReports((prev) =>
       prev.map((r) =>
-        r.id === id
-          ? {
-              ...r,
-              upvotes: type === "UP" ? r.upvotes + 1 : r.upvotes,
-              downvotes: type === "DOWN" ? r.downvotes + 1 : r.downvotes,
-            }
+        r.id === reportId
+          ? { ...r, upvotes, downvotes, userVote }
           : r
       )
     );
+
+    // ✅ Update selected report
+    setSelectedReport((prev) =>
+      prev && prev.id === reportId
+        ? { ...prev, upvotes, downvotes, userVote }
+        : prev
+    );
+  } catch (err) {
+    console.error("Vote failed", err);
+    alert("Failed to register vote");
+  }
+  };
+  const handleToggleType = async (reportId, newType) => {
+  const token = await getAccessTokenSilently({
+    audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+  });
+
+  const res = await axios.patch(
+    "/api/garbage/toggle-type",
+    { reportId, type: newType },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+
+  const { type } = res.data;
+
+  // update reports
+  setReports((prev) =>
+    prev.map((r) =>
+      r.id === reportId ? { ...r, type } : r
+    )
+  );
+
+  // update selected
+  setSelectedReport((prev) =>
+    prev && prev.id === reportId ? { ...prev, type } : prev
+  );
   };
   const fetchReports = async () => {
     const token = await getAccessTokenSilently({
@@ -105,9 +189,18 @@ export default function GarbageFeature() {
 
   return (
     <div className="flex h-screen w-screen bg-zinc-950">
-      <div className="w-96 border-r border-zinc-800 bg-zinc-900 p-4">
-        <GarbageUpload userLocation={userLocation} onSubmit={addReport} />
-      </div>
+      <div className="w-96 border-r border-zinc-800 bg-zinc-900 p-4 space-y-6">
+  <GarbageUpload
+    userLocation={userLocation}
+    onSubmit={addReport}
+  />
+
+  <MyComplaints
+    reports={myReports}
+    onDelete={handleDeleteReport}
+    onSelect={setSelectedReport}
+  />
+</div>
 
       <div className="flex-1">
         <GarbageMap
@@ -115,7 +208,8 @@ export default function GarbageFeature() {
           reports={reports}
           selectedReport={selectedReport}
           onSelect={setSelectedReport}
-          onVote={vote}
+          onVote={handleVote}
+          onToggleType={handleToggleType}
         />
       </div>
     </div>
