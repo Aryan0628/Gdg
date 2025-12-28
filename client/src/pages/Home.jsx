@@ -1,9 +1,11 @@
 import { useAuth0 } from "@auth0/auth0-react";
 import { ArrowRight, MapPin, Navigation, Zap } from "lucide-react";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
 import FloatingLines from '../ui/FloatingLines';
 
 export default function Home() {
   const { loginWithRedirect } = useAuth0();
+  const navigate = useNavigate(); // Initialize navigate function
 
   return (
     <div className="absolute h-screen w-screen overflow-hidden 
@@ -52,7 +54,9 @@ export default function Home() {
               Get Started
             </button>
 
-            <button className="px-8 py-4 rounded-full border border-white/20 hover:bg-white/10">
+            <button 
+              onClick={() => navigate('/mission')}
+              className="px-8 py-4 rounded-full border border-white/20 hover:bg-white/10 transition-all active:scale-95">
               Learn More
             </button>
           </div>
