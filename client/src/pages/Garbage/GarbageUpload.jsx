@@ -1,24 +1,58 @@
 import { useState } from "react"
 import { Button } from "../../ui/button"
-import { createGarbageReport } from "./garbage.types"
+import axios from "axios"
+import { useAuthStore } from "../../store/useAuthStore.js"
+import { useAuth0 } from "@auth0/auth0-react";
+
+
 
 export default function GarbageUpload({ userLocation, onSubmit }) {
   const [title, setTitle] = useState("")
   const [image, setImage] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const { getAccessTokenSilently } = useAuth0();
 
-  const handleSubmit = () => {
-    if (!title || !image || !userLocation) return
 
-    const report = createGarbageReport({
-      title,
-      imageUrl: URL.createObjectURL(image),
-      location: userLocation,
-      userId: "demo-user",
-    })
+  const user = useAuthStore((state) => state.user)
 
-    onSubmit(report)
-    setTitle("")
-    setImage(null)
+  const handleSubmit = async () => {
+    if (!title || !image || !userLocation || !user) return
+
+    try {
+      setLoading(true)
+      const token = await getAccessTokenSilently({
+  audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+});
+
+      const formData = new FormData()
+      formData.append("image", image) // 🔥 FILE
+      formData.append("title", title)
+      formData.append("lat", userLocation.lat)
+      formData.append("lng", userLocation.lng)
+      formData.append("userId", user.sub)
+  
+      const res = await axios.post("/api/garbage", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+           Authorization: `Bearer ${token}`,
+        },
+      })
+
+      console.log(res.data)
+      // Backend returns Cloudinary URL
+      const savedReport = res.data.report
+
+      // Update frontend map
+      onSubmit(savedReport)
+
+      setTitle("")
+      setImage(null)
+    } catch (error) {
+      console.error("Upload failed", error)
+      alert("Failed to upload garbage report")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -45,14 +79,16 @@ export default function GarbageUpload({ userLocation, onSubmit }) {
         <img
           src={URL.createObjectURL(image)}
           className="rounded"
+          alt="preview"
         />
       )}
 
       <Button
         className="w-full bg-green-600 hover:bg-green-700"
         onClick={handleSubmit}
+        disabled={loading}
       >
-        Submit
+        {loading ? "Uploading..." : "Submit"}
       </Button>
     </div>
   )

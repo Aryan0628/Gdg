@@ -54,8 +54,6 @@ function GarbageMap({
     },
     [onSelect]
   )
-
-  /* ❌ Error state */
   if (loadError || !import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">

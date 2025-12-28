@@ -6,7 +6,6 @@ import Mission from "./pages/Mission";
 import AboutUs from "./pages/AboutUs";
 import Navbar from "./components/Navbar";
 
-import CivicHub from "./pages/CivicHub";  // Import the new CivicHub page
 import GarbageFeature from "./pages/Garbage/Garbage"
 function App() {
   const location = useLocation();
@@ -31,19 +30,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-      </Routes>
-    </>
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <CivicHub />
-          </ProtectedRoute>
-        }
-      />
-      <Route
+        <Route
         path="/garbage"
         element={
           <ProtectedRoute>
@@ -51,7 +38,9 @@ function App() {
           </ProtectedRoute>
         }
       />
-    </Routes>
+      </Routes>
+    </>
+
   );
 }
 

@@ -19,6 +19,15 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+
+import {checkJwt} from "./src/auth/authMiddleware.js"
+
+
 app.use("/api/auth", authRoutes);
+
+import garbage from "./src/routes/garbage.route.js"
+app.use("/api/garbage",garbage);
+
+
 
 export { app };
