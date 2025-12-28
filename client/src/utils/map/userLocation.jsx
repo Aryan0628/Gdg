@@ -5,21 +5,22 @@ const containerStyle = {
   height: "400px",
 };
 
-const center = {
-  lat: 28.6139, 
-  lng: 78.2090,
-};
+export default function MapView({ lat, lng }) {
+  const center = {
+    lat: lat || 28.6139,
+    lng: lng || 78.2090,
+  };
 
-export default function Map() {
   return (
     <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_KEY}>
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
-        zoom={12}
+        zoom={14}
       >
         <Marker position={center} />
       </GoogleMap>
     </LoadScript>
   );
 }
+

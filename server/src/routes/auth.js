@@ -1,6 +1,7 @@
 import express from "express";
 import axios from "axios";
-import { db } from "../firebaseadmin/firebaseadmin.js";
+import {db} from "../firebaseadmin/firebaseadmin.js";
+
 import { checkJwt } from "../auth/authMiddleware.js";
 
 const router = express.Router();
@@ -25,19 +26,19 @@ router.post("/sync-user", checkJwt, async (req, res) => {
     );
 
     // Firestore reference
-    const userRef = db.collection("users").doc(user.sub);
+const userRef = db.collection("users").doc(user.sub);
 
-    const doc = await userRef.get();
+const doc = await userRef.get();
 
-    if (!doc.exists) {
-      await userRef.set({
-        email: user.email ?? null,
-        name: user.name ?? null,
-        picture: user.picture ?? null,
-        provider: user.sub.split("|")[0],
-        createdAt: new Date(),
-      });
-    }
+if (!doc.exists) {
+  await userRef.set({
+    uid: user.sub,
+    email: user.email ?? null,
+    name: user.name ?? null,
+    picture: user.picture ?? null,
+    createdAt: new Date(),
+  });
+}
 
     return res.json({ success: true });
   } catch (error) {
