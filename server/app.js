@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRoutes from "./src/routes/auth.js";
-
+import roomData from "./src/routes/room.js"
 const app = express();
 
 console.log("CORS ORIGIN:", process.env.CORS_ORIGIN);
@@ -24,10 +24,5 @@ import {checkJwt} from "./src/auth/authMiddleware.js"
 
 
 app.use("/api/auth", authRoutes);
-
-import garbage from "./src/routes/garbage.route.js"
-app.use("/api/garbage",garbage);
-
-
-
+app.use("/api/room",roomData);
 export { app };

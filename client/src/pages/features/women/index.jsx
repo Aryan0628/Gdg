@@ -1,21 +1,27 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "../../../ui/button"
 import { Badge } from "../../../ui/badge"
 import { Navigation, X, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { ref, get, update, onValue, off } from "firebase/database"
+import { db } from "../../../firebase/firebase"
+import { useAuthStore } from "../../../store/useAuthStore"
 import GoogleMapComponent from "../../../components/google-map"
 import FeaturePanel from "../../../components/feature-panel"
 import { WOMEN_FEATURE } from "./config"
 import LocationAccess from "./LocationAccess"
 import Commute from "./Commute"
-
 export default function WomenSafetyPage() {
-  const [userLocation, setUserLocation] = useState(null)
-  const [locationPermission, setLocationPermission] = useState("prompt")
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const [stage, setStage] = useState("location") // "location" | "commute" | "map"
+  const [routeStart, setRouteStart] = useState(null)
+  const [routeEnd, setRouteEnd] = useState(null)
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false)
+  const [otherUsers, setOtherUsers] = useState([])
+  const [geoWatchId, setGeoWatchId] = useState(null)
   const navigate = useNavigate()
-
+  const { user } = useAuthStore()
   const feature = WOMEN_FEATURE
 
   const requestLocation = async () => {
@@ -25,19 +31,139 @@ export default function WomenSafetyPage() {
         navigator.geolocation.getCurrentPosition(resolve, reject)
       })
 
-      setUserLocation({
+      setCurrentLocation({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
       })
-      setLocationPermission("granted")
       setStage("commute") // Move to commute after location access
     } catch (error) {
       console.error("Location permission denied:", error)
-      setLocationPermission("denied")
     } finally {
       setIsLoadingLocation(false)
     }
   }
+  // Fetch route data from Firebase when map stage loads
+  useEffect(() => {
+    const fetchRouteData = async () => {
+      if (stage !== "map" || !user) return
+
+      setIsLoadingRoute(true)
+      try {
+        const userActiveRef = ref(db, `women/user_active/${user.sub}`)
+        const snapshot = await get(userActiveRef)
+
+        if (snapshot.exists()) {
+          const data = snapshot.val()
+          if (data.start && data.end) {
+            setRouteStart({
+              lat: data.start.start_lat,
+              lng: data.start.start_lng,
+            })
+            setRouteEnd({
+              lat: data.end.end_lat,
+              lng: data.end.end_lng,
+            })
+            
+            // Start location tracking
+            startLocationTracking(data.routeId)
+            
+            // Listen to room members
+            listenToRoomMembers(data.routeId)
+          }
+        } else {
+          console.error("No route data found for user")
+        }
+      } catch (error) {
+        console.error("Error fetching route data:", error)
+      } finally {
+        setIsLoadingRoute(false)
+      }
+    }
+
+    fetchRouteData()
+    
+    // Cleanup on unmount
+    return () => {
+      if (geoWatchId !== null) {
+        navigator.geolocation.clearWatch(geoWatchId)
+      }
+    }
+  }, [stage, user])
+
+
+
+const startLocationTracking = (routeId) => {
+    if (!navigator.geolocation) {
+      console.error("Geolocation not supported")
+      return
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const lat = position.coords.latitude
+        const lng = position.coords.longitude
+
+        setCurrentLocation({ lat, lng })
+
+        try {
+          // Update user's current location in user_active
+          await update(ref(db, `women/user_active/${user.sub}`), {
+            current: { lat, lng },
+          })
+
+          // Update user's location in room members
+          await update(
+            ref(db, `women/rooms/${routeId}/members/${user.sub}`),
+            {
+              current_lat: lat,
+              current_lng: lng,
+            }
+          )
+        } catch (error) {
+          console.error("Error updating location:", error)
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error)
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 3000,
+        timeout: 10000,
+      }
+    )
+
+    setGeoWatchId(watchId)
+  }
+
+  const listenToRoomMembers = (routeId) => {
+    const roomMembersRef = ref(db, `women/rooms/${routeId}/members`)
+
+    const unsubscribe = onValue(roomMembersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const membersData = snapshot.val()
+        const members = []
+
+        // Filter out current user and transform data
+        Object.entries(membersData).forEach(([userId, memberData]) => {
+          if (userId !== user.sub) {
+            members.push({
+              userId,
+              current_lat: memberData.current_lat,
+              current_lng: memberData.current_lng,
+              status: memberData.status,
+            })
+          }
+        })
+
+        setOtherUsers(members)
+      }
+    })
+
+    // Cleanup listener on unmount
+    return () => off(roomMembersRef)
+  }
+
 
   const handleCommuteComplete = () => {
     setStage("map") // Move to final map view after commute setup
@@ -73,7 +199,7 @@ export default function WomenSafetyPage() {
               </div>
             </div>
 
-            {userLocation && (
+            {currentLocation && (
               <Badge className="gap-2 bg-green-600 text-white border-0">
                 <Navigation className="h-3 w-3" />
                 Location Active
@@ -84,7 +210,7 @@ export default function WomenSafetyPage() {
 
         {/* Commute Component */}
         <div className="flex-1">
-          <Commute onComplete={handleCommuteComplete} userLocation={userLocation} />
+          <Commute onComplete={handleCommuteComplete} userLocation={currentLocation} />
         </div>
       </div>
     )
@@ -116,7 +242,7 @@ export default function WomenSafetyPage() {
             </div>
           </div>
 
-          {userLocation && (
+          {currentLocation && (
             <Badge className="gap-2 bg-green-600 text-white border-0">
               <Navigation className="h-3 w-3" />
               Location Active
@@ -144,7 +270,7 @@ export default function WomenSafetyPage() {
 
             <FeaturePanel
               feature={feature}
-              userLocation={userLocation}
+              userLocation={currentLocation}
               isLoadingLocation={isLoadingLocation}
               onRequestLocation={requestLocation}
             />
@@ -154,9 +280,13 @@ export default function WomenSafetyPage() {
         {/* MAP */}
         <div className="flex-1 relative">
           <GoogleMapComponent
-            userLocation={userLocation}
             selectedFeature={feature.id}
-            isLoadingLocation={isLoadingLocation}
+            isLoadingLocation={isLoadingRoute}
+            routeStart={routeStart}
+            routeEnd={routeEnd}
+            currentUserLocation={currentLocation}
+            currentUser={user}
+            otherUsers={otherUsers}
           />
         </div>
       </div>
