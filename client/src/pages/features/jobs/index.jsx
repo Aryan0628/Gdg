@@ -1,114 +1,124 @@
-import { useState } from "react"
-import { Button } from "../../../ui/button"
-import { Badge } from "../../../ui/badge"
-import { Navigation, X, ArrowLeft } from "lucide-react"
-import { useNavigate } from "react-router-dom"
-import GoogleMapComponent from "../../../components/google-map"
-import FeaturePanel from "../../../components/feature-panel"
-import { JOBS_FEATURE } from "./config"
+import { useEffect, useState } from "react";
+import { ref, set, serverTimestamp } from "firebase/database";
+import axios from "axios";
+
+import { db } from "../../../firebase/firebase.js";
+import { useAuthStore } from "../../../store/useAuthStore.js";
+
+import JobCreate from "./JobCreate";
+import JobList from "./JobList";
+import MyJobs from "./MyJobs";
+import JobChat from "./JobChat";
+import JobsMap from "./JobsMap";
 
 export default function JobsPage() {
-  const [userLocation, setUserLocation] = useState(null)
-  const [locationPermission, setLocationPermission] = useState("prompt")
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false)
-  const navigate = useNavigate()
+  const { user } = useAuthStore();
 
-  const feature = JOBS_FEATURE
-  const needsOnboarding = false
+  const [activeTab, setActiveTab] = useState("ALL");
+  const [jobs, setJobs] = useState([]);
+  const [myJobs, setMyJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
 
-  const requestLocation = async () => {
-    setIsLoadingLocation(true)
+  /* ---------------- FETCH JOBS ---------------- */
+
+  const fetchJobs = async () => {
+    const res = await axios.get("/api/jobs");
+    setJobs(res.data.jobs || []);
+  };
+
+  const fetchMyJobs = async () => {
+    if (!user) return;
+
+    const res = await axios.get("/api/jobs/my", {
+      headers: {
+        Authorization: `Bearer ${user.accessToken}`,
+      },
+    });
+    setMyJobs(res.data.jobs || []);
+  };
+
+  useEffect(() => {
+    fetchJobs();
+    fetchMyJobs();
+  }, [user]);
+
+  /* ---------------- JOIN JOB ROOM ---------------- */
+
+  const selectJobAndJoin = async (job) => {
+    setSelectedJob(job);
+
+    if (!user) return;
+
     try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject)
-      })
-
-      setUserLocation({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-      })
-      setLocationPermission("granted")
-    } catch (error) {
-      console.error("Location permission denied:", error)
-      setLocationPermission("denied")
-    } finally {
-      setIsLoadingLocation(false)
+      await set(
+        ref(db, `jobs/rooms/${job.id}/members/${user.sub}`),
+        {
+          joinedAt: serverTimestamp(),
+          userName: user.name || "Anonymous",
+          userImage: user.picture || "",
+        }
+      );
+    } catch (err) {
+      console.error("Failed to join job room:", err);
     }
-  }
+  };
+
+  /* ---------------- UI ---------------- */
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
-      {/* HEADER */}
-      <header className="border-b border-zinc-800 bg-zinc-900">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/dashboard")}
-              className="text-zinc-400 hover:text-white mr-2 p-0"
+    <div className="h-screen flex bg-zinc-950 text-white overflow-hidden">
+      {/* LEFT PANEL */}
+      <div className="w-80 border-r border-zinc-800 p-4 space-y-4">
+        {/* TABS */}
+        <div className="flex gap-2">
+          {["ALL", "MY", "CREATE"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 rounded text-sm font-semibold ${
+                activeTab === tab
+                  ? "bg-blue-600"
+                  : "bg-zinc-800 hover:bg-zinc-700"
+              }`}
             >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="h-10 w-10 rounded-lg bg-blue-600 flex items-center justify-center">
-              <feature.icon className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">UrbanFlow</h1>
-              <p className="text-xs text-zinc-400">
-                Community Safety Dashboard
-              </p>
-            </div>
-          </div>
-
-          {userLocation && (
-            <Badge className="gap-2 bg-green-600 text-white border-0">
-              <Navigation className="h-3 w-3" />
-              Location Active
-            </Badge>
-          )}
-        </div>
-      </header>
-
-      {/* BODY */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL */}
-        <div className="w-96 overflow-y-auto border-r border-zinc-800 bg-zinc-900">
-          <div className="p-6 space-y-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                navigate("/dashboard")
-              }}
-              className="mb-4 text-zinc-400 hover:text-white"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Close Map View
-            </Button>
-
-            {needsOnboarding ? null : (
-              <FeaturePanel
-                feature={feature}
-                userLocation={userLocation}
-                isLoadingLocation={isLoadingLocation}
-                onRequestLocation={requestLocation}
-              />
-            )}
-          </div>
+              {tab}
+            </button>
+          ))}
         </div>
 
-        {/* MAP */}
-        {!needsOnboarding ? (
-          <div className="flex-1 relative">
-            <GoogleMapComponent
-              userLocation={userLocation}
-              selectedFeature={feature.id}
-              isLoadingLocation={isLoadingLocation}
-            />
+        {/* CONTENT */}
+        {activeTab === "CREATE" && (
+          <JobCreate onCreated={fetchJobs} />
+        )}
+
+        {activeTab === "ALL" && (
+          <JobList jobs={jobs} onSelect={selectJobAndJoin} />
+        )}
+
+        {activeTab === "MY" && (
+          <MyJobs jobs={myJobs} onSelect={selectJobAndJoin} />
+        )}
+      </div>
+
+      {/* MAP */}
+      <div className="flex-1 border-r border-zinc-800">
+        <JobsMap
+          jobs={jobs}
+          selectedJob={selectedJob}
+          onSelect={selectJobAndJoin}
+        />
+      </div>
+
+      {/* CHAT */}
+      <div className="w-[420px] p-3">
+        {selectedJob ? (
+          <JobChat job={selectedJob} />
+        ) : (
+          <div className="h-full flex items-center justify-center text-zinc-500">
+            Select a job to start chatting
           </div>
-        ) : null}
+        )}
       </div>
     </div>
-  )
+  );
 }
