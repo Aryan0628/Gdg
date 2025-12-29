@@ -146,7 +146,6 @@ export default function WomenSafetyPage() {
       }
     })
   }
-
   // --- SEND MESSAGE FUNCTION ---
   const pushMessage = async (messageText) => {
     if (!messageText || !messageText.trim()) return
@@ -173,6 +172,13 @@ export default function WomenSafetyPage() {
         },
         { headers: { "Content-Type": "application/json" } }
       )
+
+      
+      
+
+
+
+
     } catch (error) {
       console.error("Error sending message:", error)
     }
