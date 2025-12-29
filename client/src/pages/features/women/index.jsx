@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "../../../ui/button"
 import { Badge } from "../../../ui/badge"
-import { Navigation, ArrowLeft } from "lucide-react" // Removed X here as it's now in ChatPanel
+import { Navigation, ArrowLeft } from "lucide-react" 
 import { useNavigate } from "react-router-dom"
 import { ref, get, update, onValue, off, push, set, serverTimestamp } from "firebase/database"
 import { db } from "../../../firebase/firebase"
 import { useAuthStore } from "../../../store/useAuthStore"
 import GoogleMapComponent from "../../../components/google-map"
-// import FeaturePanel from "../../../components/feature-panel" // <-- REMOVED OLD PANEL
-import ChatSidePanel from "./chat-side-panel"// <-- IMPORT NEW CHAT
+import ChatSidePanel from "./chat-side-panel"
 import { WOMEN_FEATURE } from "./config"
 import LocationAccess from "./LocationAccess"
 import Commute from "./Commute"
 import axios from "axios"
+
 export default function WomenSafetyPage() {
   const [currentLocation, setCurrentLocation] = useState(null)
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
@@ -22,7 +22,7 @@ export default function WomenSafetyPage() {
   const [isLoadingRoute, setIsLoadingRoute] = useState(false)
   const [otherUsers, setOtherUsers] = useState([])
   const [activeRouteId, setActiveRouteId] = useState(null)
-  const [chatMessages, setChatMessages] = useState([]) // State for messages
+  const [chatMessages, setChatMessages] = useState([]) 
 
   const geoWatchIdRef = useRef(null)
   const roomListenerUnsubscribeRef = useRef(null)
@@ -30,7 +30,7 @@ export default function WomenSafetyPage() {
   const { user } = useAuthStore()
   const feature = WOMEN_FEATURE
 
-  // --- LOCATION & ROUTE LOGIC (Same as before) ---
+
   const requestLocation = async () => {
     setIsLoadingLocation(true)
     try {
@@ -84,7 +84,7 @@ export default function WomenSafetyPage() {
     fetchRouteData()
   }, [stage, user])
 
-  // --- CHAT LISTENER (Same as before) ---
+
   useEffect(() => {
     if (!activeRouteId) return
     const messageRef = ref(db, `women/rooms/${activeRouteId}/messages`)
@@ -95,7 +95,7 @@ export default function WomenSafetyPage() {
           id: key,
           ...value,
         }))
-        // Optional: Sort by timestamp
+
         loadedMessages.sort((a, b) => a.timestamp - b.timestamp)
         setChatMessages(loadedMessages)
       } else {
@@ -105,7 +105,6 @@ export default function WomenSafetyPage() {
     return () => off(messageRef)
   }, [activeRouteId])
 
-  // --- TRACKING FUNCTIONS (Same as before) ---
   const startLocationTracking = (routeId) => {
     if (!navigator.geolocation) return
     if (geoWatchIdRef.current !== null) navigator.geolocation.clearWatch(geoWatchIdRef.current)
@@ -146,25 +145,24 @@ export default function WomenSafetyPage() {
       }
     })
   }
-  // --- SEND MESSAGE FUNCTION ---
+
   const pushMessage = async (messageText) => {
     if (!messageText || !messageText.trim()) return
     if (!activeRouteId || !user) return
 
     try {
-      // 1. Realtime DB
+      // 1 Send to Firebase Realtime DB (Instant UI Update)
       const messagesRef = ref(db, `women/rooms/${activeRouteId}/messages`)
       const newMessageRef = push(messagesRef)
       await set(newMessageRef, {
         userId: user.sub,
         userName: user.name || "Anonymous",
-        // Fallback for profile picture if zustand is empty
         userImage: user.profileurl || user.picture || "", 
         text: messageText,
         timestamp: serverTimestamp(),
       })
 
-      // 2. Firestore Backup
+      // 2  Backup to Firestore (Existing Logic)
       await axios.post(`/api/room/room_data`, {
           roomId: activeRouteId,
           userId: user.sub,
@@ -173,14 +171,53 @@ export default function WomenSafetyPage() {
         { headers: { "Content-Type": "application/json" } }
       )
 
-      
-      
 
+      const recentHistory = chatMessages
+        .slice(-10) // Take last 10
+        .map(msg => ({
+          userId: msg.userId,
+          message: msg.text // Map 'text' to 'message' as expected by Python Schema
+        }));
 
+      // Send to the Model Controller
+      // We use 'currentUseremssage' to match the typo in your controller file
+      const response=await axios.post(`/api/model/layer1`, {
+        roomId: activeRouteId,
+        messages: recentHistory,
+        currentUseremssage: messageText, // The message just sent
+        currentUserId: user.sub
+      });
+      const {details}=response.data;
+      const baseRef = ref(db, `women/rooms/${activeRouteId}/safety`);
+      if (details?.sentiment) {
+        const sentimentRef = push(ref(baseRef, "sentiment"));
+        await set(sentimentRef, {
+          score: details.sentiment.sentiment_score,
+          reason: details.sentiment.reason,
+          timestamp: Date.now()
+        });
+      }
+      if (details?.urgency) {
+        const urgencyRef = push(ref(baseRef, "urgency"));
+        await set(urgencyRef, {
+          score: details.urgency.urgency_score,
+          reason: details.urgency.reason,
+          timestamp: Date.now()
+        });
+      }
+      if (details?.severity) {
+        const severityRef = push(ref(baseRef, "severity"));
+        await set(severityRef, {
+          score: details.severity.severity_score,
+          reason: details.severity.reason,
+          timestamp: Date.now()
+        });
+      }
 
+      console.log("Message sent to AI for analysis");
 
     } catch (error) {
-      console.error("Error sending message:", error)
+      console.error("Error sending message or analyzing:", error)
     }
   }
 
@@ -190,6 +227,7 @@ export default function WomenSafetyPage() {
   if (stage === "location") return <LocationAccess onRequestLocation={requestLocation} isLoadingLocation={isLoadingLocation} />
 
   if (stage === "commute") {
+    // ... [Keep existing Commute UI] ...
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col">
         <header className="border-b border-zinc-800 bg-zinc-900">
@@ -249,7 +287,7 @@ export default function WomenSafetyPage() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL - REPLACED WITH CHAT */}
+        {/* LEFT PANEL - CHAT */}
         <div className="w-96 border-r border-zinc-800 bg-zinc-900 h-full">
           <ChatSidePanel 
             messages={chatMessages}

@@ -21,4 +21,5 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/room",roomData);
+app.use("/api/model",)
 export { app };
