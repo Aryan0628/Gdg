@@ -1,0 +1,29 @@
+# --- Core Server ---
+fastapi
+uvicorn
+python-dotenv
+requests
+pydantic
+
+# --- AI & LangGraph Framework ---
+langgraph
+langchain
+langchain-core
+langchain-community
+langchain-text-splitters
+langchain-openai
+langchain-google-genai
+
+# --- Data & Math (from your list) ---
+numpy
+pandas
+pydantic-core
+
+# --- Utilities (from your list) ---
+python-dateutil
+pytz
+PyYAML
+regex
+httpx
+typing-extensions
+tiktoken
