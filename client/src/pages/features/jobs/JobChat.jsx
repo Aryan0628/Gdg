@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { ref, onValue, off, push, set, serverTimestamp } from "firebase/database";
 import { db } from "../../../firebase/firebase.js";
-import { useAuthStore } from "../../store/useAuthStore";
+import { useAuthStore } from "../../../store/useAuthStore.js";
 
 export default function JobChat({ job }) {
   const { user } = useAuthStore();
