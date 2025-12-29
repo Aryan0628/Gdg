@@ -53,7 +53,7 @@ export default function JobChat({ job }) {
 
     setText("");
   };
-
+  
   return (
     <div className="h-full flex flex-col bg-zinc-900 rounded">
       {/* HEADER */}

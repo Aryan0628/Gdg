@@ -20,8 +20,6 @@ app.use(express.json());
 app.use(cookieParser());
 
 
-import {checkJwt} from "./src/auth/authMiddleware.js"
-
 
 app.use("/api/auth", authRoutes);
 app.use("/api/room",roomData);
@@ -29,6 +27,8 @@ app.use("/api/room",roomData);
 import garbage from "./src/routes/garbage.route.js"
 app.use("/api/garbage",garbage);
 
+import jobs from "./src/routes/job.route.js"
+app.use("/api/jobs",jobs);
 
 
 export { app };

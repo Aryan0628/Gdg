@@ -27,7 +27,7 @@ export default function JobsMap({
   return (
     <GoogleMap
       mapContainerStyle={containerStyle}
-      center={userLocation || { lat: 28.6139, lng: 77.209 }}
+      center={userLocation}
       zoom={13}
       options={{ fullscreenControl: false }}
     >

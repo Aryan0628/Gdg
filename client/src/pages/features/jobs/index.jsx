@@ -4,6 +4,7 @@ import axios from "axios";
 
 import { db } from "../../../firebase/firebase.js";
 import { useAuthStore } from "../../../store/useAuthStore.js";
+import { useAuth0 } from "@auth0/auth0-react";
 
 import JobCreate from "./JobCreate";
 import JobList from "./JobList";
@@ -11,34 +12,74 @@ import MyJobs from "./MyJobs";
 import JobChat from "./JobChat";
 import JobsMap from "./JobsMap";
 
+import { Button } from "../../../ui/button";
+import { MapPin, Loader2 } from "lucide-react";
+
 export default function JobsPage() {
   const { user } = useAuthStore();
+  const { getAccessTokenSilently } = useAuth0();
 
   const [activeTab, setActiveTab] = useState("ALL");
   const [jobs, setJobs] = useState([]);
   const [myJobs, setMyJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
 
-  /* ---------------- FETCH JOBS ---------------- */
+  const [userLocation, setUserLocation] = useState(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
-  const fetchJobs = async () => {
-    const res = await axios.get("/api/jobs");
-    setJobs(res.data.jobs || []);
+  /* ---------------- LOCATION ---------------- */
+
+  const requestLocation = async () => {
+    setIsLoadingLocation(true);
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+      setUserLocation({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      });
+    } catch (err) {
+      console.error("Location denied", err);
+      alert("Location access is required to view nearby jobs.");
+    } finally {
+      setIsLoadingLocation(false);
+    }
   };
 
+  const fetchJobs = async () => {
+
+  if (!userLocation) return;
+    console.log(userLocation)
+  const res = await axios.get("/api/jobs/nearby", {
+    params: {
+      lat: userLocation.lat,
+      lng: userLocation.lng,
+    },
+  });
+  console.log(res.data);
+  setJobs(res.data.jobs || []);
+};
   const fetchMyJobs = async () => {
     if (!user) return;
 
-    const res = await axios.get("/api/jobs/my", {
-      headers: {
-        Authorization: `Bearer ${user.accessToken}`,
-      },
+    const token = await getAccessTokenSilently({
+      audience: import.meta.env.VITE_AUTH0_AUDIENCE,
     });
+
+    const res = await axios.get("/api/jobs/my", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
     setMyJobs(res.data.jobs || []);
   };
 
   useEffect(() => {
-    fetchJobs();
+  if (!userLocation) return;
+  fetchJobs();
+}, [userLocation]);
+
+  useEffect(() => {
     fetchMyJobs();
   }, [user]);
 
@@ -46,7 +87,6 @@ export default function JobsPage() {
 
   const selectJobAndJoin = async (job) => {
     setSelectedJob(job);
-
     if (!user) return;
 
     try {
@@ -63,13 +103,45 @@ export default function JobsPage() {
     }
   };
 
-  /* ---------------- UI ---------------- */
+  /* ---------------- LOCATION GATE ---------------- */
+
+  if (!userLocation) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-zinc-950">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-80 text-center space-y-4">
+          <MapPin className="h-10 w-10 text-blue-500 mx-auto" />
+          <h3 className="text-white font-semibold text-lg">
+            Enable Location
+          </h3>
+          <p className="text-sm text-zinc-400">
+            We need your location to show nearby jobs on the map.
+          </p>
+
+          <Button
+            className="w-full"
+            onClick={requestLocation}
+            disabled={isLoadingLocation}
+          >
+            {isLoadingLocation ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Fetching location…
+              </>
+            ) : (
+              "Enable Location"
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ---------------- MAIN UI ---------------- */
 
   return (
     <div className="h-screen flex bg-zinc-950 text-white overflow-hidden">
       {/* LEFT PANEL */}
       <div className="w-80 border-r border-zinc-800 p-4 space-y-4">
-        {/* TABS */}
         <div className="flex gap-2">
           {["ALL", "MY", "CREATE"].map((tab) => (
             <button
@@ -86,9 +158,8 @@ export default function JobsPage() {
           ))}
         </div>
 
-        {/* CONTENT */}
         {activeTab === "CREATE" && (
-          <JobCreate onCreated={fetchJobs} />
+          <JobCreate onCreated={fetchJobs} location={userLocation} />
         )}
 
         {activeTab === "ALL" && (
@@ -106,6 +177,7 @@ export default function JobsPage() {
           jobs={jobs}
           selectedJob={selectedJob}
           onSelect={selectJobAndJoin}
+          userLocation={userLocation}
         />
       </div>
 
