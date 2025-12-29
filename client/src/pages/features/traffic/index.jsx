@@ -7,7 +7,6 @@ import GoogleMapComponent from "../../../components/google-map"
 import FeaturePanel from "../../../components/feature-panel"
 import { SafetyOnboarding } from "../../../components/safety-onboarding"
 import { TRAFFIC_FEATURE } from "./config"
-
 export default function TrafficPage() {
   const [userLocation, setUserLocation] = useState(null)
   const [locationPermission, setLocationPermission] = useState("prompt")

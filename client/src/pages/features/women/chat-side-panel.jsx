@@ -4,6 +4,8 @@ import { Input } from "../../../ui/input"
  // If you don't have this, use a simple div with overflow-y-auto
 import { Send, X, MapPin } from "lucide-react" // Assuming you have shadcn Avatar, else use img
 
+
+
 export default function ChatSidePanel({ 
   messages = [], 
   currentUser, 

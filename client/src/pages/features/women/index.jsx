@@ -170,7 +170,7 @@ export default function WomenSafetyPage() {
         },
         { headers: { "Content-Type": "application/json" } }
       )
-
+      console.log("save root to firestore")
 
       const recentHistory = chatMessages
         .slice(-10) // Take last 10
@@ -179,41 +179,73 @@ export default function WomenSafetyPage() {
           message: msg.text // Map 'text' to 'message' as expected by Python Schema
         }));
 
+        console.log("recentHistory",recentHistory);
+
       // Send to the Model Controller
       // We use 'currentUseremssage' to match the typo in your controller file
-      const response=await axios.post(`/api/model/layer1`, {
+      const response=await axios.post(`/api/model/agent1`, {
         roomId: activeRouteId,
         messages: recentHistory,
         currentUseremssage: messageText, // The message just sent
         currentUserId: user.sub
       });
-      const {details}=response.data;
-      const baseRef = ref(db, `women/rooms/${activeRouteId}/safety`);
-      if (details?.sentiment) {
-        const sentimentRef = push(ref(baseRef, "sentiment"));
-        await set(sentimentRef, {
-          score: details.sentiment.sentiment_score,
-          reason: details.sentiment.reason,
-          timestamp: Date.now()
-        });
-      }
-      if (details?.urgency) {
-        const urgencyRef = push(ref(baseRef, "urgency"));
-        await set(urgencyRef, {
-          score: details.urgency.urgency_score,
-          reason: details.urgency.reason,
-          timestamp: Date.now()
-        });
-      }
-      if (details?.severity) {
-        const severityRef = push(ref(baseRef, "severity"));
-        await set(severityRef, {
-          score: details.severity.severity_score,
-          reason: details.severity.reason,
-          timestamp: Date.now()
+
+      console.log("response from agent1",response);
+      const {final_score}=response.data;
+      const baseRef = ref(db, `women/rooms/${activeRouteId}/finalScore`);
+      if (final_score !== undefined && final_score !== null) {
+        await set(baseRef, {
+          score: final_score
         });
       }
 
+      console.log("Final score added in rooms")
+      let foundGeoHash = null;
+      const geosHOT = await get(ref(db, "women/localrooms"));
+
+      if (geosHOT.exists()) {
+        const data = snapshot.val();
+
+        for (const geoHash in data) {
+          if (data[geoHash][routeId]) {
+            foundGeoHash = geoHash;
+            break;
+          }
+        }
+      }
+      console.log("Geohashfound",foundGeoHash);
+
+
+      const localref=ref(db,(`women/localroom/${foundGeoHash}/${activeRouteId}`));
+      if(final_score){
+        const finalscorel=push(ref(localref,"finalScore"));
+        await set(finalscorel,{
+          score:final_score
+        })
+      }
+      console.log("Initialised score in localroom")
+      const snapshot = await get(ref(db, `women/localroom/${foundGeoHash}`));
+      const result = {};
+
+      if (snapshot.exists()) {
+        const routes = snapshot.val();
+
+        for (const routeId in routes) {
+          const finalScoreNode = routes[routeId].finalScore;
+
+          if (!finalScoreNode) continue;
+
+          result[routeId] = Object.values(finalScoreNode).map(
+            entry => entry.score
+          );
+        }
+      }
+      console.log("result ready to push to agent2 ",result);
+ 
+    //now i am having roomIds with their score its time to send data to my model 
+      const response_agent2=await axios.post(`/api/model/agent2`,{
+        payload:result,
+      });
       console.log("Message sent to AI for analysis");
 
     } catch (error) {

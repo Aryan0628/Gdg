@@ -1,18 +1,19 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, RootModel
+from typing import List, Dict
 from brain.layel_1 import app_graph, FrontendMessage
+from brain.layel_2 import surveillance_agent # Assuming this is your surveillance graph
 
 app = FastAPI()
 
-# 1. Define Request that matches your Frontend
+# 1. Chat Request Schema
 class ChatRequest(BaseModel):
     roomId: str
     messages: List[FrontendMessage]
     currentUserMessage: str
     currentUserId: str
 
-@app.post("/chat")
+@app.post("/agent1")
 async def chat_endpoint(req: ChatRequest):
     try:
         # 2. Prepare the State
@@ -23,12 +24,12 @@ async def chat_endpoint(req: ChatRequest):
             "currentUserId": req.currentUserId
         }
 
-        # 3. Configure Threading (Memory)
-        # Using roomId as thread_id ensures context is kept for this specific room
+        # 3. Threading Config
         config = {"configurable": {"thread_id": req.roomId}}
 
-        # 4. Run Graph
-        final_state = app_graph.invoke(initial_state, config=config)
+        # 4. Run Graph (ASYNC NOW)
+        # We use 'await' and 'ainvoke' to prevent blocking the server
+        final_state = await app_graph.ainvoke(initial_state, config=config)
 
         # 5. Return structured result
         return {
@@ -43,5 +44,31 @@ async def chat_endpoint(req: ChatRequest):
         }
 
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in Chat Endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 6. Surveillance Request Schema
+class RouteBatchRequest(RootModel):
+    root: Dict[str, List[float]]
+
+@app.post("/agent2")
+async def surveillance_scan(req: RouteBatchRequest):
+    try:
+        initial_state = {
+            "route_data": req.root,
+            "messages": []
+        }
+
+        # This was already async, keeping it consistent
+        result = await surveillance_agent.ainvoke(initial_state)
+
+        final_msg = result["messages"][-1].content
+
+        return {
+            "status": "success",
+            "ai_report": final_msg
+        }
+
+    except Exception as e:
+        print(f"Error in Surveillance Endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,8 +1,8 @@
 import axios from "axios"
-const analyzechat=async(req,res)=>{
+const orchestrate_agent_1=async(req,res)=>{
     try {
         const {roomId,messages,currentUseremssage,currentUserId}=req.body
-        const modelresponse=await axios.post('http://127.0.0.1:8000/chat',{
+        const modelresponse=await axios.post('http://127.0.0.1:8000/agent1',{
             roomId,
             messages,
             currentUsermessage:currentUseremssage,
@@ -12,10 +12,10 @@ const analyzechat=async(req,res)=>{
         res.status(200).json(modelresponse.data);
     } catch (error) {
         console.log("AI Engine Error",error.message);
-        res.status(500).json({error:"Failed to process chat with AI"})
+        res.status(500).json({error:"Failed to orchestrate agent1"})
 
         
     }
 
 }
-export default analyzechat
+export default orchestrate_agent_1

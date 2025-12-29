@@ -64,7 +64,8 @@ final_engine = pro_model.with_structured_output(FinalScore)
 
 # --- 5. WORKER NODES (Specialized & Efficient) ---
 
-def analyze_sentiment(state: GraphState):
+# Changed to 'async def' and 'await ... .ainvoke()'
+async def analyze_sentiment(state: GraphState):
     msg = state["currentUserMessage"]
     prompt = f"""
     ROLE: Linguistic Sentiment Analyst.
@@ -80,10 +81,11 @@ def analyze_sentiment(state: GraphState):
     
     OUTPUT: Provide a precise float score and a 5-word explanation.
     """
-    result = sentiment_engine.invoke(prompt)
+    result = await sentiment_engine.ainvoke(prompt)
     return {"model_1": result}
 
-def analyze_urgency(state: GraphState):
+# Changed to 'async def' and 'await ... .ainvoke()'
+async def analyze_urgency(state: GraphState):
     msg = state["currentUserMessage"]
     prompt = f"""
     ROLE: Emergency Response Dispatcher.
@@ -99,10 +101,11 @@ def analyze_urgency(state: GraphState):
     
     OUTPUT: specific urgency_score and reason.
     """
-    result = urgency_engine.invoke(prompt)
+    result = await urgency_engine.ainvoke(prompt)
     return {"model_2": result}
 
-def analyze_severity(state: GraphState):
+# Changed to 'async def' and 'await ... .ainvoke()'
+async def analyze_severity(state: GraphState):
     msg = state["currentUserMessage"]
     prompt = f"""
     ROLE: Harassment & Threat Detection Specialist.
@@ -118,12 +121,13 @@ def analyze_severity(state: GraphState):
     
     OUTPUT: specific severity_score and reason.
     """
-    result = severity_engine.invoke(prompt)
+    result = await severity_engine.ainvoke(prompt)
     return {"model_3": result}
 
 # --- 6. THE FINAL JUDGE (With Memory Context) ---
 
-def final_judge(state: GraphState):
+# Changed to 'async def' and 'await ... .ainvoke()'
+async def final_judge(state: GraphState):
     # 1. Extract & Format History (Last 10 messages for efficiency)
     raw_history = state["messages"][-10:] 
     history_str = "\n".join([f"[{m.userId}]: {m.message}" for m in raw_history])
@@ -155,21 +159,21 @@ def final_judge(state: GraphState):
     
     --- SCORING RUBRIC (1-10) ---
     
-    [1-3] SAFE / GREEN:
+    [9-10] SAFE / GREEN:
     - Casual conversation, jokes, friendly banter.
     - Even if Sentiment is low (0.2), if Severity is 0, it might just be an argument between friends.
     
-    [4-6] SUSPICIOUS / YELLOW:
+    [7-8] SUSPICIOUS / YELLOW:
     - Unwanted pestering after being told "no" (Check History!).
     - Creepy comments, weird questions about location.
     - Sudden change in tone from friendly to aggressive.
     
-    [7-8] HARASSMENT / ORANGE:
+    [4-6] HARASSMENT / ORANGE:
     - Explicit sexual comments.
     - Stalking behavior ("I see you at the station").
     - Persistent abuse.
     
-    [9-10] DANGER / RED:
+    [1-3] DANGER / RED:
     - Direct threats of violence.
     - "Help", "Police", "Emergency".
     - User explicitly stating they are being followed or touched.
@@ -187,7 +191,7 @@ def final_judge(state: GraphState):
        - Output a precise score and a detailed explanation citing specific messages from history if relevant.
     """
     
-    result = final_engine.invoke(prompt)
+    result = await final_engine.ainvoke(prompt)
     return {"final_model_score": result}
 
 # --- 7. COMPILE GRAPH ---
