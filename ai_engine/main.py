@@ -2,11 +2,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, RootModel
 from typing import List, Dict
 from brain.layel_1 import app_graph, FrontendMessage
-from brain.layel_2 import surveillance_agent # Assuming this is your surveillance graph
-
+from brain.layel_2 import surveillance_agent
+from brain.agent3 import analyze_emergency,FrontendMessage
 app = FastAPI()
-
-# 1. Chat Request Schema
+from langchain_core.messages import AIMessage
 class ChatRequest(BaseModel):
     roomId: str
     messages: List[FrontendMessage]
@@ -16,7 +15,6 @@ class ChatRequest(BaseModel):
 @app.post("/agent1")
 async def chat_endpoint(req: ChatRequest):
     try:
-        # 2. Prepare the State
         initial_state = {
             "roomId": req.roomId,
             "messages": req.messages,
@@ -24,14 +22,12 @@ async def chat_endpoint(req: ChatRequest):
             "currentUserId": req.currentUserId
         }
 
-        # 3. Threading Config
         config = {"configurable": {"thread_id": req.roomId}}
 
-        # 4. Run Graph (ASYNC NOW)
-        # We use 'await' and 'ainvoke' to prevent blocking the server
+   
         final_state = await app_graph.ainvoke(initial_state, config=config)
 
-        # 5. Return structured result
+    
         return {
             "status": "success",
             "final_score": final_state["final_model_score"].final_safety_score,
@@ -47,7 +43,6 @@ async def chat_endpoint(req: ChatRequest):
         print(f"Error in Chat Endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# 6. Surveillance Request Schema
 class RouteBatchRequest(RootModel):
     root: Dict[str, List[float]]
 
@@ -71,4 +66,34 @@ async def surveillance_scan(req: RouteBatchRequest):
 
     except Exception as e:
         print(f"Error in Surveillance Endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class ThrottleRequest(BaseModel):
+    userId: str
+    routeId: str
+    messages: List[FrontendMessage] 
+
+@app.post("/throttle")
+async def throttle_push(req: ThrottleRequest):
+    try:
+        
+        initial_state = {
+            "userId": req.userId,
+            "routeId": req.routeId,
+            "messages": req.messages, 
+            "context": None          
+        }
+
+        # 3. Invoke the graph
+        result = await analyze_emergency.ainvoke(initial_state)
+        
+        final_msg = result.get("context", "No analysis generated")
+
+        return {
+            "status": "Emergency Marked",
+            "ai_analysis": final_msg
+        }
+
+    except Exception as e:
+        print(f"Error in throttle agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))

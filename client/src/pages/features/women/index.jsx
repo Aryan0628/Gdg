@@ -30,7 +30,6 @@ export default function WomenSafetyPage() {
   const { user } = useAuthStore()
   const feature = WOMEN_FEATURE
 
-
   const requestLocation = async () => {
     setIsLoadingLocation(true)
     try {
@@ -105,6 +104,20 @@ export default function WomenSafetyPage() {
     return () => off(messageRef)
   }, [activeRouteId])
 
+  const throttle=async(chatMessages)=>{
+
+    try {
+      await axios.post(`/api/model/throttle`,{
+        message:chatMessages,
+        userId:user.sub,
+        routeId:activeRouteId
+      },{headers:{"Content-Type": "application/json"}}
+      )
+      console.log("emergency agent activated",message)
+    } catch (error) {
+      console.log("Error calling emergency agent",error.message)
+    }
+  }
   const startLocationTracking = (routeId) => {
     if (!navigator.geolocation) return
     if (geoWatchIdRef.current !== null) navigator.geolocation.clearWatch(geoWatchIdRef.current)
