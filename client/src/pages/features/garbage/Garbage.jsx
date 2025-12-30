@@ -109,33 +109,6 @@ const handleDeleteReport = async (reportId) => {
     alert("Failed to register vote");
   }
   };
-  const handleToggleType = async (reportId, newType) => {
-  const token = await getAccessTokenSilently({
-    audience: import.meta.env.VITE_AUTH0_AUDIENCE,
-  });
-
-  const res = await axios.patch(
-    "/api/garbage/toggle-type",
-    { reportId, type: newType },
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
-
-  const { type } = res.data;
-
-  // update reports
-  setReports((prev) =>
-    prev.map((r) =>
-      r.id === reportId ? { ...r, type } : r
-    )
-  );
-
-  // update selected
-  setSelectedReport((prev) =>
-    prev && prev.id === reportId ? { ...prev, type } : prev
-  );
-  };
   const fetchReports = async () => {
     const token = await getAccessTokenSilently({
       audience: import.meta.env.VITE_AUTH0_AUDIENCE,
@@ -209,7 +182,6 @@ const handleDeleteReport = async (reportId) => {
           selectedReport={selectedReport}
           onSelect={setSelectedReport}
           onVote={handleVote}
-          onToggleType={handleToggleType}
         />
       </div>
     </div>

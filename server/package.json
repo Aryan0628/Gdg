@@ -13,6 +13,8 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "@google-cloud/vertexai": "^1.10.0",
+    "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.2",
     "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",

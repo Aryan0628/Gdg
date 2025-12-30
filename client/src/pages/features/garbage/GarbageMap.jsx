@@ -38,55 +38,21 @@ const mapOptions = {
   ],
 };
 
-function GarbageMap({
-  userLocation,
-  reports,
-  selectedReport,
-  onSelect,
-  onVote,
-  onToggleType,
-}) {
+function GarbageMap({ userLocation, reports, selectedReport, onSelect, onVote }) {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
   });
 
-  const handleMarkerClick = useCallback(
-    (report) => {
-      onSelect(report);
-    },
-    [onSelect]
-  );
-  if (loadError || !import.meta.env.VITE_GOOGLE_MAPS_API_KEY) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
-        <div className="text-center space-y-3">
-          <AlertCircle className="h-10 w-10 text-yellow-500 mx-auto" />
-          <p className="text-sm text-white">Google Maps API key missing</p>
-        </div>
-      </div>
-    );
-  }
+  const getHazardColor = (level) => {
+    switch (level) {
+      case "High": return "bg-red-500";
+      case "Medium": return "bg-orange-500";
+      default: return "bg-zinc-500";
+    }
+  };
 
-  /* ⏳ Loading state */
-  if (!isLoaded) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
-  }
-
-  /* 📍 No location */
-  if (!userLocation) {
-    return (
-      <div className="absolute inset-0 bg-black/80 z-10 flex items-center justify-center">
-        <div className="text-center">
-          <MapPin className="h-12 w-12 text-zinc-500 mx-auto" />
-          <p className="text-sm text-white">Location access required</p>
-        </div>
-      </div>
-    );
-  }
+  if (loadError) return <div className="flex h-full items-center justify-center bg-zinc-950 text-white"><AlertCircle className="mr-2" /> Map Error</div>;
+  if (!isLoaded) return <div className="flex h-full items-center justify-center bg-zinc-950"><Loader2 className="animate-spin text-blue-500" /></div>;
 
   return (
     <GoogleMap
@@ -96,81 +62,75 @@ function GarbageMap({
       options={mapOptions}
     >
       {/* 🧍 User Marker */}
-      <Marker
-        position={userLocation}
-        title="Your Location"
-        icon={{
-          url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png",
-        }}
-      />
+      <Marker position={userLocation} title="You are here" />
 
-      {/* 🗑️ Garbage Markers */}
+      {/* 🗑️ AI-Categorized Markers */}
       {reports.map((r) => (
         <Marker
           key={r.id}
           position={r.location}
-          onClick={() => handleMarkerClick(r)}
+          onClick={() => onSelect(r)}
           icon={{
-  url:
-    r.type === "DUSTBIN"
-      ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
-      : "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
-}}
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: r.type === "DUSTBIN" ? "#22c55e" : "#ef4444",
+            fillOpacity: 0.9,
+            strokeWeight: 2,
+            strokeColor: "#ffffff",
+            // Scaling logic: Base size 7 + (Severity score 1-10)
+            scale: r.type === "DUSTBIN" ? 8 : 6 + (r.severity || 1),
+          }}
         />
       ))}
 
-      {/* ℹ️ Info Window */}
+      
       {selectedReport && (
-        <InfoWindow
-          position={selectedReport.location}
-          onCloseClick={() => onSelect(null)}
-        >
-          <div className="text-black w-56 space-y-2">
-            <img
-              src={selectedReport.imageUrl}
-              className="rounded-md w-full h-28 object-cover"
-              alt="garbage"
+  <InfoWindow
+   
+    position={selectedReport.location}
+    onCloseClick={() => onSelect(null)}
+  >
+    <div className="text-zinc-900 w-64 max-h-80 overflow-y-auto p-1">
+      <img
+        src={selectedReport.imageUrl}
+        className="rounded-lg w-full h-32 object-cover bg-zinc-200"
+        alt="report"
+        // Handle broken images
+        onError={(e) => { e.target.src = 'https://placehold.co/400x300?text=No+Image'; }}
+      />
+
+      <div className="mt-2 space-y-2">
+        <h3 className="font-bold text-sm truncate">
+          {selectedReport.title || "Untitled Report"}
+        </h3>
+
+        <div className="flex gap-2">
+           <span className="text-[10px] bg-zinc-100 px-2 py-0.5 rounded border border-zinc-200">
+             {selectedReport.type || "GARBAGE"}
+           </span>
+           {selectedReport.hazard && (
+             <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded border border-red-200 font-bold">
+               {selectedReport.hazard} Hazard
+             </span>
+           )}
+        </div>
+
+        <p className="text-[11px] text-zinc-600 italic leading-snug bg-blue-50/50 p-2 rounded">
+          {selectedReport.aiAnalysis || "No analysis available for this report."}
+        </p>
+
+        {/* Only show severity if it exists and is not a dustbin */}
+        {selectedReport.type !== "DUSTBIN" && selectedReport.severity && (
+          <div className="w-full bg-zinc-200 h-1.5 rounded-full">
+            <div 
+              className="h-full bg-red-500 rounded-full" 
+              style={{ width: `${selectedReport.severity * 10}%` }}
             />
-
-            <h3 className="font-semibold text-sm">{selectedReport.title}</h3>
-
-            <div className="flex justify-between pt-2">
-              <button
-                onClick={() => onVote(selectedReport.id, "UP")}
-                className="flex items-center gap-1 text-green-600"
-              >
-                <ThumbsUp size={16} />
-                {selectedReport.upvotes}
-              </button>
-
-              <button
-                onClick={() => onVote(selectedReport.id, "DOWN")}
-                className="flex items-center gap-1 text-red-600"
-              >
-                <ThumbsDown size={16} />
-                {selectedReport.downvotes}
-              </button>
-            </div>
-            <button
-              onClick={() =>
-                onToggleType(
-                  selectedReport.id,
-                  selectedReport.type === "GARBAGE" ? "DUSTBIN" : "GARBAGE"
-                )
-              }
-              className={`w-full mt-3 py-1 rounded text-xs font-semibold ${
-                selectedReport.type === "GARBAGE"
-                  ? "bg-green-600 text-white"
-                  : "bg-red-600 text-white"
-              }`}
-            >
-              {selectedReport.type === "GARBAGE"
-                ? "Mark as Dustbin Available"
-                : "Mark as Garbage"}
-            </button>
           </div>
-        </InfoWindow>
-      )}
+        )}
+      </div>
+    </div>
+  </InfoWindow>
+)}
     </GoogleMap>
   );
 }

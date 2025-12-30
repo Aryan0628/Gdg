@@ -3,74 +3,120 @@ import { upload } from "../../middlewares/upload.js"
 import { db } from "../firebaseadmin/firebaseadmin.js"
 import { uploadToCloudinary } from "../utils/uploadCloudinary.js"
 import { checkJwt } from "../auth/authMiddleware.js"
-import { geohashForLocation } from "geofire-common";
 
 const router = express.Router()
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { geohashForLocation } from "geofire-common";
 
-router.post(
-  "/",
-  checkJwt,                  
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      
-      const userId = req.auth?.payload?.sub
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-      if (!userId) {
-        return res.status(401).json({ message: "Unauthorized" })
-      }
 
-      const { title, lat, lng } = req.body
+router.post("/", checkJwt, upload.single("image"), async (req, res) => {
+  try {
+    const userId = req.auth?.payload?.sub;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-     
-      if (!req.file) {
-        return res.status(400).json({ message: "Image is required" })
-      }
-      if (!title || !lat || !lng) {
-        return res.status(400).json({ message: "Missing required fields" })
-      }
+    const { title, lat, lng } = req.body;
 
-     
-      const { imageUrl, publicId } = await uploadToCloudinary(
-        req.file.buffer,
-        "garbage-reports"
-      )
+    
+    if (!req.file) return res.status(400).json({ message: "Image is required" });
+    if (!title || !lat || !lng) return res.status(400).json({ message: "Missing fields" });
 
-      const geohash = geohashForLocation([Number(lat), Number(lng)]);
-      const reportData = {
-        title,
-        imageUrl,
-        publicId,
-        location: {
-          lat: Number(lat),
-          lng: Number(lng),
-        },
-        geohash,
-        upvotes: 0,
-        downvotes: 0,
-        userId,                
-        status: "OPEN",
-        createdAt: new Date(),
-      }
+    const [cloudinaryResult, aiAnalysisResult] = await Promise.allSettled([
+      uploadToCloudinary(req.file.buffer, "garbage-reports"),
+      analyzeImageWithAI(req.file.buffer, req.file.mimetype)
+    ]);
 
-      
-      const docRef = await db.collection("garbageReports").add(reportData)
-
-      const report = {
-        id: docRef.id,
-        ...reportData,
-      }
-
-      return res.status(201).json({
-        success: true,
-        report,
-      })
-    } catch (err) {
-      console.error("Garbage upload error:", err)
-      return res.status(500).json({ message: "Upload failed" })
+    
+    if (cloudinaryResult.status === "rejected") {
+      throw new Error("Cloudinary upload failed");
     }
+    const { imageUrl, publicId } = cloudinaryResult.value;
+
+    
+    const aiData = aiAnalysisResult.status === "fulfilled" 
+      ? aiAnalysisResult.value 
+      : { type: "GARBAGE", severity: 1, hazard: "Low", analysis: "AI analysis unavailable" };
+
+    
+    const geohash = geohashForLocation([Number(lat), Number(lng)]);
+    const reportData = {
+      title,
+      imageUrl,
+      publicId,
+      location: {
+        lat: Number(lat),
+        lng: Number(lng),
+      },
+      geohash,
+      userId,
+      
+      type: aiData.type,
+      severity: aiData.severity,
+      hazard: aiData.hazard,
+      aiAnalysis: aiData.analysis,
+      
+      upvotes: 0,
+      downvotes: 0,
+      votes: {}, // To track user-specific votes
+      status: "OPEN",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    
+    const docRef = await db.collection("garbageReports").add(reportData);
+    
+    return res.status(201).json({
+      success: true,
+      report: { id: docRef.id, ...reportData },
+    });
+
+  } catch (err) {
+    console.error("Critical Upload Error:", err);
+    return res.status(500).json({ message: "Server failed to process report" });
   }
-)
+});
+import { VertexAI } from '@google-cloud/vertexai';
+
+  const vertex_ai = new VertexAI({
+  project: 'your-project-id', // Found in Cloud Console
+  location: 'us-central1'
+});
+async function analyzeImageWithAI(buffer, mimeType) {
+  console.log(genAI)
+  const vertex_ai = new VertexAI({
+  project: 'urbanflow-41ce2',
+  location: 'us-central1'
+});
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-flash",
+    generationConfig: { responseMimeType: "application/json" } 
+  });
+
+  const imagePart = {
+    inlineData: {
+      data: buffer.toString("base64"),
+      mimeType: mimeType,
+    },
+  };
+
+  const prompt = `Analyze this environmental report image. Return a JSON object with:
+    {
+      "type": "DUSTBIN" | "GARBAGE",
+      "severity": number (1-10),
+      "hazard": "Low" | "Medium" | "High",
+      "analysis": "one short sentence description"
+    }
+    Criteria: If it's a public trash bin, type is DUSTBIN and severity is 1. 
+    If it's loose litter/dumping, type is GARBAGE.
+    Severity is 10 for massive piles. Hazard is High if there are needles, chemicals, or broken glass.`;
+
+  const result = await model.generateContent([prompt, imagePart]);
+  const response = await result.response;
+  return JSON.parse(response.candidates[0].content.parts[0].text);
+}
+
 
 import { getNearbyGarbageReports } from "../services/garbage.service.js"
 router.get("/nearby", checkJwt, async (req, res) => {
@@ -168,12 +214,19 @@ router.patch("/toggle-type", checkJwt, async (req, res) => {
     return res.status(404).json({ message: "Report not found" });
   }
 
-  await ref.update({
+  // If toggled to DUSTBIN, we reset severity/hazard because it's no longer "trash"
+  const updates = {
     type,
     updatedAt: new Date(),
-  });
+    ...(type === "DUSTBIN" && {
+      severity: 1,
+      hazard: "Low",
+      aiAnalysis: "Manually reclassified as Dustbin"
+    })
+  };
 
-  res.json({ success: true, type });
+  await ref.update(updates);
+  res.json({ success: true, ...updates });
 });
 router.delete("/:reportId", checkJwt, async (req, res) => {
   const { reportId } = req.params;
