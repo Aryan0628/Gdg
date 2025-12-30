@@ -5,7 +5,7 @@ import { Navigation, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import GoogleMapComponent from "../../../components/google-map"
-import NgoPortal from "../../../components/ngo-portal"
+import NgoPortal from "./NgoPortal"
 import { NGO_FEATURE } from "./config"
 
 export default function NGOPage() {
