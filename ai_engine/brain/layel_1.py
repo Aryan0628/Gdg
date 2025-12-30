@@ -13,13 +13,13 @@ if not os.getenv("GOOGLE_API_KEY"):
 
 # --- 1. SETUP MODELS ---
 flash_model = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",
     temperature=0, 
     max_retries=2,
 )
 
 pro_model = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro", # Using Pro for the heavy lifting of context analysis
+    model="gemini-2.5-pro", # Using Pro for the heavy lifting of context analysis
     temperature=0.1,
 )
 

@@ -23,6 +23,8 @@ export default function WomenSafetyPage() {
   const [otherUsers, setOtherUsers] = useState([])
   const [activeRouteId, setActiveRouteId] = useState(null)
   const [chatMessages, setChatMessages] = useState([]) 
+  const [finalScore,setfinalScore]=useState(null)
+  const [routeGeoHash, setRouteGeoHash] = useState(null)
 
   const geoWatchIdRef = useRef(null)
   const roomListenerUnsubscribeRef = useRef(null)
@@ -55,22 +57,36 @@ export default function WomenSafetyPage() {
     }
   }, [])
 
-  useEffect(() => {
+useEffect(() => {
     const fetchRouteData = async () => {
       if (stage !== "map" || !user) return
       setIsLoadingRoute(true)
+      
       try {
         const userActiveRef = ref(db, `women/user_active/${user.sub}`)
         const snapshot = await get(userActiveRef)
+        
         if (snapshot.exists()) {
           const data = snapshot.val()
+          
           if (data.start && data.end) {
             setRouteStart({ lat: data.start.start_lat, lng: data.start.start_lng })
             setRouteEnd({ lat: data.end.end_lat, lng: data.end.end_lng })
+  
             if (data.routeId) {
               setActiveRouteId(data.routeId)
+              const roomGeoRef = ref(db, `women/routes/${data.routeId}/geoHash`)
+              
+              const unsubscribeGeo = onValue(roomGeoRef, (geoSnap) => {
+                if (geoSnap.exists()) {
+                   console.log("📍 GeoHash Found:", geoSnap.val());
+                   setRouteGeoHash(geoSnap.val());
+                }
+              });
+
               startLocationTracking(data.routeId)
               roomListenerUnsubscribeRef.current = listenToRoomMembers(data.routeId)
+              return () => off(roomGeoRef);
             }
           }
         }
@@ -80,6 +96,7 @@ export default function WomenSafetyPage() {
         setIsLoadingRoute(false)
       }
     }
+    
     fetchRouteData()
   }, [stage, user])
 
@@ -104,20 +121,23 @@ export default function WomenSafetyPage() {
     return () => off(messageRef)
   }, [activeRouteId])
 
-  const throttle=async(chatMessages)=>{
-
+  // --- UPDATED THROTTLE FUNCTION ---
+  // Ensuring it receives the messages correctly when called
+  const throttle = async () => {
+    console.log("Triggering Emergency Throttle...")
     try {
       await axios.post(`/api/model/throttle`,{
-        message:chatMessages,
-        userId:user.sub,
-        routeId:activeRouteId
+        message: chatMessages, // Uses the current state 'chatMessages'
+        userId: user.sub,
+        routeId: activeRouteId
       },{headers:{"Content-Type": "application/json"}}
       )
-      console.log("emergency agent activated",message)
+      console.log("Emergency agent activated successfully")
     } catch (error) {
-      console.log("Error calling emergency agent",error.message)
+      console.log("Error calling emergency agent", error.message)
     }
   }
+
   const startLocationTracking = (routeId) => {
     if (!navigator.geolocation) return
     if (geoWatchIdRef.current !== null) navigator.geolocation.clearWatch(geoWatchIdRef.current)
@@ -164,7 +184,7 @@ export default function WomenSafetyPage() {
     if (!activeRouteId || !user) return
 
     try {
-      // 1 Send to Firebase Realtime DB (Instant UI Update)
+      // 1. Send to Firebase Realtime DB
       const messagesRef = ref(db, `women/rooms/${activeRouteId}/messages`)
       const newMessageRef = push(messagesRef)
       await set(newMessageRef, {
@@ -175,7 +195,7 @@ export default function WomenSafetyPage() {
         timestamp: serverTimestamp(),
       })
 
-      // 2  Backup to Firestore (Existing Logic)
+      // 2. Backup to Firestore
       await axios.post(`/api/room/room_data`, {
           roomId: activeRouteId,
           userId: user.sub,
@@ -183,83 +203,80 @@ export default function WomenSafetyPage() {
         },
         { headers: { "Content-Type": "application/json" } }
       )
-      console.log("save root to firestore")
 
-      const recentHistory = chatMessages
-        .slice(-10) // Take last 10
-        .map(msg => ({
+      const recentHistory = chatMessages.slice(-10).map(msg => ({
           userId: msg.userId,
-          message: msg.text // Map 'text' to 'message' as expected by Python Schema
-        }));
+          message: msg.text 
+      }));
 
-        console.log("recentHistory",recentHistory);
-
-      // Send to the Model Controller
-      // We use 'currentUseremssage' to match the typo in your controller file
-      const response=await axios.post(`/api/model/agent1`, {
+      // ---------------------------------------------------------
+      // 🔴 FIX 1: Corrected Capitalization ('M') to match Python
+      // ---------------------------------------------------------
+      const response = await axios.post(`/api/model/agent1`, {
         roomId: activeRouteId,
         messages: recentHistory,
-        currentUseremssage: messageText, // The message just sent
-        currentUserId: user.sub
+        currentUserMessage: messageText, // ✅ Capital 'M'
+        currentUserId: user.sub,
       });
 
-      console.log("response from agent1",response);
-      const {final_score}=response.data;
+      const { final_score } = response.data;
+      setfinalScore(final_score); // Ensure state name matches your state variable
+
+      // Save to Global Room Score
       const baseRef = ref(db, `women/rooms/${activeRouteId}/finalScore`);
       if (final_score !== undefined && final_score !== null) {
-        await set(baseRef, {
-          score: final_score
-        });
+        await set(baseRef, { score: final_score });
       }
 
-      console.log("Final score added in rooms")
-      let foundGeoHash = null;
-      const geosHOT = await get(ref(db, "women/localrooms"));
+      // ---------------------------------------------------------
+      // 🔴 FIX 2: Removed Duplicate Block
+      // We only write to 'localroom' ONCE and capture the key
+      // ---------------------------------------------------------
+      let newScoreKey = null;
 
-      if (geosHOT.exists()) {
-        const data = snapshot.val();
-
-        for (const geoHash in data) {
-          if (data[geoHash][routeId]) {
-            foundGeoHash = geoHash;
-            break;
-          }
-        }
-      }
-      console.log("Geohashfound",foundGeoHash);
-
-
-      const localref=ref(db,(`women/localroom/${foundGeoHash}/${activeRouteId}`));
       if(final_score){
-        const finalscorel=push(ref(localref,"finalScore"));
-        await set(finalscorel,{
-          score:final_score
-        })
+        const localScoreListRef = ref(db, `women/localroom/${routeGeoHash}/${activeRouteId}/finalScore`);
+        const newScoreRef = push(localScoreListRef); 
+        
+        newScoreKey = newScoreRef.key; // Capture key for logic below
+        
+        await set(newScoreRef, { score: final_score })
       }
-      console.log("Initialised score in localroom")
-      const snapshot = await get(ref(db, `women/localroom/${foundGeoHash}`));
+
+      // 3. Fetch Area Data & Agent 2 Call
+      const snapshot = await get(ref(db, `women/localroom/${routeGeoHash}`));
       const result = {};
 
       if (snapshot.exists()) {
         const routes = snapshot.val();
 
         for (const routeId in routes) {
-          const finalScoreNode = routes[routeId].finalScore;
-
+          const finalScoreNode = routes[routeId].finalScore; 
           if (!finalScoreNode) continue;
 
-          result[routeId] = Object.values(finalScoreNode).map(
-            entry => entry.score
-          );
+          let scoresArray = Object.values(finalScoreNode).map(e => e.score);
+          
+          // Optimistic Merging Logic
+          if (routeId === activeRouteId && newScoreKey) {
+             const isMyScoreAlreadyHere = finalScoreNode.hasOwnProperty(newScoreKey);
+             
+             if (!isMyScoreAlreadyHere && final_score) {
+                 scoresArray.push(final_score);
+             }
+          }
+          result[routeId] = scoresArray;
+        }
+      } else {
+        if (final_score) {
+           result[activeRouteId] = [final_score];
         }
       }
-      console.log("result ready to push to agent2 ",result);
  
-    //now i am having roomIds with their score its time to send data to my model 
-      const response_agent2=await axios.post(`/api/model/agent2`,{
-        payload:result,
+      // Call Agent 2
+      const response_agent2 = await axios.post(`/api/model/agent2`, {
+        payload: result,
       });
-      console.log("Message sent to AI for analysis");
+      console.log("Agent 2 Analysis:", response_agent2.data);
 
     } catch (error) {
       console.error("Error sending message or analyzing:", error)
@@ -272,7 +289,6 @@ export default function WomenSafetyPage() {
   if (stage === "location") return <LocationAccess onRequestLocation={requestLocation} isLoadingLocation={isLoadingLocation} />
 
   if (stage === "commute") {
-    // ... [Keep existing Commute UI] ...
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col">
         <header className="border-b border-zinc-800 bg-zinc-900">
@@ -340,6 +356,7 @@ export default function WomenSafetyPage() {
             onSendMessage={pushMessage}
             onClose={handleCloseMap}
             routeId={activeRouteId}
+            onThrottle={throttle} /* PASSING THE FUNCTION HERE */
           />
         </div>
 

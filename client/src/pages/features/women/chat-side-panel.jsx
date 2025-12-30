@@ -1,19 +1,18 @@
 import { useState, useRef, useEffect } from "react"
 import { Button } from "../../../ui/button"
 import { Input } from "../../../ui/input"
- // If you don't have this, use a simple div with overflow-y-auto
-import { Send, X, MapPin } from "lucide-react" // Assuming you have shadcn Avatar, else use img
-
-
+import { Send, X, AlertTriangle } from "lucide-react" // Added AlertTriangle icon
 
 export default function ChatSidePanel({ 
   messages = [], 
   currentUser, 
   onSendMessage, 
   onClose,
-  routeId 
+  routeId,
+  onThrottle // Receiving the prop
 }) {
   const [newMessage, setNewMessage] = useState("")
+  const [isThrottled, setIsThrottled] = useState(false) // Local state to handle disable
   const messagesEndRef = useRef(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -29,9 +28,16 @@ export default function ChatSidePanel({
     setNewMessage("")
   }
 
+  // Handle Throttle Click
+  const handleThrottleClick = () => {
+    if (onThrottle) {
+      onThrottle(); // Call the parent function
+      setIsThrottled(true); // Disable button immediately
+    }
+  }
+
   const formatTime = (timestamp) => {
     if (!timestamp) return ""
-    // Handle Firebase serverTimestamp (which comes back as milliseconds)
     return new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit' 
@@ -52,9 +58,24 @@ export default function ChatSidePanel({
           </h2>
           <p className="text-xs text-zinc-400">Route ID: #{routeId?.slice(-4) || "..."}</p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white">
-          <X className="h-4 w-4" />
-        </Button>
+        
+        {/* ACTIONS: Throttle Button + Close */}
+        <div className="flex items-center gap-2">
+          <Button 
+            variant={isThrottled ? "secondary" : "destructive"} 
+            size="sm" 
+            onClick={handleThrottleClick}
+            disabled={isThrottled}
+            className={`font-bold transition-all ${isThrottled ? "bg-zinc-700 text-zinc-400" : "bg-red-600 hover:bg-red-700 animate-pulse"}`}
+          >
+            <AlertTriangle className="h-4 w-4 mr-1" />
+            {isThrottled ? "Alert Sent" : "SOS"}
+          </Button>
+          
+          <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* MESSAGES AREA */}
@@ -75,7 +96,6 @@ export default function ChatSidePanel({
                 {/* PROFILE PICTURE */}
                 <div className="flex-shrink-0">
                   <div className="h-8 w-8 rounded-full overflow-hidden border border-zinc-700">
-                     {/* Using the specific profileurl field as requested */}
                     <img 
                       src={isMe ? (currentUser.profileurl || currentUser.picture) : "https://github.com/shadcn.png"} 
                       alt="User" 

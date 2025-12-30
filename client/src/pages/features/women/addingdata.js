@@ -244,6 +244,10 @@ export const saveRouteToDatabase = async (routeData) => {
         end_lng: end_lng,     // "end lag"
         
       });
+      await update(ref(db, `women/routes/${route_id}`), {
+        geoHash: targetGeohash
+      });
+
     } else {
         console.log("No further action needed for Local Room (already exists).");
     }
