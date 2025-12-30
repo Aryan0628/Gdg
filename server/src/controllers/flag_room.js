@@ -1,20 +1,19 @@
 import { db } from "../firebaseadmin/firebaseadmin.js";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 const flag_room=async(req,res)=>{
     const { roomId, severity, ai_reason } = req.body;
     try {
-        
+            console.log("backend hitted")
             if (!roomId || !severity || !ai_reason) {
             return res.status(400).json({
                 status: "error",
                 message: "Missing required fields",
             });
             }
-            await addDoc(collection(db, "women", "flaggedRoom"), {
+            await db.collection("women").doc("flaggedRoom").collection("rooms").add({
             roomId,
             severity,
             ai_reason,
-            createdAt: serverTimestamp(),
+            createdAt: new Date() // Simple server-side timestamp
             });
         
             return res.status(200).json({

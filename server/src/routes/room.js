@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/room_data",room_data)
 router.post("/flag-room",flag_room)
-router.post("throttle-room",throttle_room)
+router.post("/throttle-room",throttle_room)
 
 export default router;
 

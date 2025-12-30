@@ -43,14 +43,14 @@ async def chat_endpoint(req: ChatRequest):
         print(f"Error in Chat Endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-class RouteBatchRequest(RootModel):
-    root: Dict[str, List[float]]
+class RouteBatchRequest(BaseModel):
+    payload: Dict[str, List[float]]
 
 @app.post("/agent2")
 async def surveillance_scan(req: RouteBatchRequest):
     try:
         initial_state = {
-            "route_data": req.root,
+            "route_data": req.payload,
             "messages": []
         }
 
@@ -71,7 +71,7 @@ async def surveillance_scan(req: RouteBatchRequest):
 class ThrottleRequest(BaseModel):
     userId: str
     routeId: str
-    messages: List[FrontendMessage] 
+    message: List[FrontendMessage] 
 
 @app.post("/throttle")
 async def throttle_push(req: ThrottleRequest):
@@ -80,7 +80,7 @@ async def throttle_push(req: ThrottleRequest):
         initial_state = {
             "userId": req.userId,
             "routeId": req.routeId,
-            "messages": req.messages, 
+            "message": req.message, 
             "context": None          
         }
 

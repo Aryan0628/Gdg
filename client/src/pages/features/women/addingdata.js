@@ -237,7 +237,7 @@ export const saveRouteToDatabase = async (routeData) => {
       }
 
       // Add data to the selected cluster
-      await set(ref(db, `women/localrooms/${targetGeohash}/${route_id}`), {
+      await set(ref(db, `women/localroom/${targetGeohash}/${route_id}`), {
         start_lat: start_lat,
         start_lng: start_lng, // "start lag"
         end_lat: end_lat,

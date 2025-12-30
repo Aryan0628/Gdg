@@ -13,14 +13,14 @@ if not os.getenv("GOOGLE_API_KEY"):
 
 # --- 1. SETUP MODELS ---
 flash_model = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     temperature=0, 
     max_retries=2,
 )
 
 pro_model = ChatGoogleGenerativeAI(
-    model="gemini-2.5-pro", # Using Pro for the heavy lifting of context analysis
-    temperature=0.1,
+    model="gemini-2.0-flash", # Using Pro for the heavy lifting of context analysis
+    temperature=0,
 )
 
 # --- 2. DEFINE OUTPUT STRUCTURES ---
@@ -141,6 +141,10 @@ async def final_judge(state: GraphState):
     # 3. The "Deep" Prompt
     prompt = f"""
     ROLE: Senior Safety Operations Manager for a Women's Safety App.
+    --- CRITICAL SCORING RULES (OVERRIDE) ---
+    1. PRESUMPTION OF SAFETY: The baseline score is 10 (Safe). Only lower the score if you see EXPLICIT evidence of danger.
+    2. THE "GREETING" EXCEPTION: Standard greetings (e.g., "Hello", "Hi", "Hey", "Hello again") are ALWAYS score 10, even if repeated, unless the recipient has explicitly said "Stop".
+    3. SILENCE IS NOT REJECTION: If the user sends a second message because the first wasn't answered, that is normal. It is NOT harassment unless the content is aggressive.
     
     GOAL: Calculate a Final Safety Score (1-10) based on Context, History, and Expert Reports.
     

@@ -7,10 +7,15 @@ const throttle_agent=async(req,res)=>{
             userId,
             routeId
         })
-        res.status(200).json(response)
+        res.status(200).json(response.data)
     } catch (error) {
-        console.log("Error from throttle agent",error.message)
-        res.status(500).json({error:"Failed to orchestrate throttle agent"})
+        if (error.response) {
+        console.error("❌ Throttle  VALIDATION ERROR:");
+        console.error(JSON.stringify(error.response.data, null, 2)); // This prints the exact missing field
+        } else {
+            console.error("❌ CONNECTION ERROR:", error.message);
+        }
+        res.status(500).json({ error: "throttle Failed" });
     }
 }
 export default throttle_agent

@@ -21,11 +21,11 @@ class FrontendMessage(BaseModel):
 class GraphState(BaseModel):
     userId: str = Field(description="The ID of the user who pressed the throttle")
     routeId: Optional[str] = Field(default=None, description="The active route ID")
-    messages: List[FrontendMessage] = Field(description="Chat history")
+    message: List[FrontendMessage] = Field(description="Chat history")
     context: Optional[str] = Field(default=None, description="AI Analysis Result")
 
 flash_model = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.0-flash",
     temperature=0, 
     max_retries=2,
 )
@@ -38,7 +38,7 @@ async def analyzeEmergency(state: GraphState):
     """
     print(f"--- ANALYZING EMERGENCY FOR USER: {state.userId} ---")
     
-    rawHistory = state.messages
+    rawHistory = state.message
     history_str = "\n".join([f"[{m.userId}]: {m.message}" for m in rawHistory]) if rawHistory else "No recent chat history."
 
     prompt = f"""

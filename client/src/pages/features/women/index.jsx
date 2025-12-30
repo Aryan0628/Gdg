@@ -120,14 +120,20 @@ useEffect(() => {
     })
     return () => off(messageRef)
   }, [activeRouteId])
+  console.log("chat messages",chatMessages);
 
   // --- UPDATED THROTTLE FUNCTION ---
   // Ensuring it receives the messages correctly when called
   const throttle = async () => {
     console.log("Triggering Emergency Throttle...")
     try {
+      const formattedMessages = chatMessages.map(msg => ({
+        userId: msg.userId,   // From your Firebase data
+        message: msg.text // From your Firebase data
+    }));
+    console.log(formattedMessages);
       await axios.post(`/api/model/throttle`,{
-        message: chatMessages, // Uses the current state 'chatMessages'
+        message: formattedMessages, // Uses the current state 'chatMessages'
         userId: user.sub,
         routeId: activeRouteId
       },{headers:{"Content-Type": "application/json"}}
@@ -240,7 +246,7 @@ useEffect(() => {
         
         newScoreKey = newScoreRef.key; // Capture key for logic below
         
-        await set(newScoreRef, { score: final_score })
+        await update(newScoreRef, { score: final_score })
       }
 
       // 3. Fetch Area Data & Agent 2 Call
@@ -271,7 +277,7 @@ useEffect(() => {
            result[activeRouteId] = [final_score];
         }
       }
- 
+      console.log("array being send to model",result)
       // Call Agent 2
       const response_agent2 = await axios.post(`/api/model/agent2`, {
         payload: result,
