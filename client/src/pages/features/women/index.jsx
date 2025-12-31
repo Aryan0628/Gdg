@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "../../../ui/button"
 import { Badge } from "../../../ui/badge"
-import { Navigation, ArrowLeft } from "lucide-react" 
+import { Navigation, ArrowLeft, AlertTriangle } from "lucide-react" 
 import { useNavigate } from "react-router-dom"
-import { ref, get, update, onValue, off, push, set, serverTimestamp } from "firebase/database"
+import { ref, get, update, onValue, off, push, set, serverTimestamp, runTransaction, remove } from "firebase/database"
 import { db } from "../../../firebase/firebase"
 import { useAuthStore } from "../../../store/useAuthStore"
 import GoogleMapComponent from "../../../components/google-map"
@@ -23,14 +23,78 @@ export default function WomenSafetyPage() {
   const [otherUsers, setOtherUsers] = useState([])
   const [activeRouteId, setActiveRouteId] = useState(null)
   const [chatMessages, setChatMessages] = useState([]) 
-  const [finalScore,setfinalScore]=useState(null)
+  const [finalScore, setfinalScore] = useState(null)
   const [routeGeoHash, setRouteGeoHash] = useState(null)
+  
+  const [isSosDisabled, setIsSosDisabled] = useState(false)
+  const [showSafetyAlert, setShowSafetyAlert] = useState(false)
+  const [sosTriggerCount, setSosTriggerCount] = useState(0)
+  
+  // --- NEW: Track WHO triggered SOS ---
+  const [sosUserId, setSosUserId] = useState(null); 
 
   const geoWatchIdRef = useRef(null)
   const roomListenerUnsubscribeRef = useRef(null)
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const feature = WOMEN_FEATURE
+
+  // --- Smart Exit Logic ---
+  const handleExit = async () => {
+    if (geoWatchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(geoWatchIdRef.current);
+    }
+
+    if (user && activeRouteId) {
+      navigate("/dashboard");
+      try {
+        console.log("Exiting... Synchronizing room state.");
+
+        // Decrement User Count
+        const countRef = ref(db, `women/routes/${activeRouteId}/userCount`);
+        await runTransaction(countRef, (currentCount) => {
+          return (currentCount || 0) > 0 ? currentCount - 1 : 0;
+        });
+
+        // Remove Myself
+        await remove(ref(db, `women/user_active/${user.sub}`));
+        await remove(ref(db, `women/rooms/${activeRouteId}/members/${user.sub}`));
+
+        // Check if room is empty
+        const membersSnapshot = await get(ref(db, `women/rooms/${activeRouteId}/members`));
+        
+        if (!membersSnapshot.exists()) {
+            console.log("Room is empty. Resetting room data.");
+            const resetUpdates = {};
+            resetUpdates[`women/rooms/${activeRouteId}/messages`] = null;
+            resetUpdates[`women/rooms/${activeRouteId}/sos_triggered`] = null;
+            resetUpdates[`women/rooms/${activeRouteId}/finalScore`] = null;
+            resetUpdates[`women/rooms/${activeRouteId}/sos_user_id`] = null;
+            await update(ref(db), resetUpdates);
+        }
+
+      } catch (error) {
+        console.error("Cleanup failed:", error);
+      }
+    }
+  };
+
+  // --- UI Logic ---
+  const getScoreUI = (score, sosCount, isMySos) => {
+    if (sosCount > 0 || isMySos) {
+        return { 
+            color: "text-red-500", 
+            bg: "bg-red-950/80 border-red-500 animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.5)]", 
+            dot: "bg-red-500 animate-ping shadow-[0_0_20px_rgba(239,68,68,1)]",
+            text: "SOS ACTIVE" 
+        };
+    }
+    if (score === null) return { color: "text-zinc-500", bg: "bg-zinc-900 border-zinc-700", dot: "bg-zinc-600", text: "Initializing..." };
+    const s = Number(score);
+    if (s >= 8) return { color: "text-emerald-400", bg: "bg-emerald-950/30 border-emerald-500/30", dot: "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]", text: `Safety Score: ${s}/10` };
+    if (s >= 5) return { color: "text-amber-400", bg: "bg-amber-950/30 border-amber-500/30", dot: "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]", text: `Caution: ${s}/10` };
+    return { color: "text-red-500", bg: "bg-red-950/30 border-red-500/50", dot: "bg-red-500 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.7)]", text: `CRITICAL: ${s}/10` };
+  }
 
   const requestLocation = async () => {
     setIsLoadingLocation(true)
@@ -57,49 +121,78 @@ export default function WomenSafetyPage() {
     }
   }, [])
 
-useEffect(() => {
+  // --- LISTENERS ---
+  useEffect(() => {
+    if (!activeRouteId) return;
+    
+    // Listen for count
+    const sosRef = ref(db, `women/rooms/${activeRouteId}/sos_triggered`);
+    const unsubscribeSos = onValue(sosRef, (snapshot) => {
+      const count = snapshot.val();
+      setSosTriggerCount(count || 0); 
+    });
+
+    // Listen for WHO triggered it
+    const sosUserRef = ref(db, `women/rooms/${activeRouteId}/sos_user_id`);
+    const unsubscribeUser = onValue(sosUserRef, (snapshot) => {
+      setSosUserId(snapshot.val()); 
+    });
+
+    return () => {
+        off(sosRef);
+        off(sosUserRef);
+    };
+  }, [activeRouteId]);
+
+  useEffect(() => {
+    if (!activeRouteId) return;
+    const scoreRef = ref(db, `women/rooms/${activeRouteId}/finalScore/score`);
+    const unsubscribe = onValue(scoreRef, (snapshot) => {
+        setfinalScore(snapshot.exists() ? snapshot.val() : null); 
+    });
+    return () => off(scoreRef);
+  }, [activeRouteId]); 
+
+  // Auto-Throttle Logic
+  useEffect(() => {
+    if (finalScore === null) return;
+    const scoreNum = Number(finalScore);
+    if (scoreNum < 4 && !isSosDisabled) {
+        throttle();
+    } else if (scoreNum < 7 && !isSosDisabled) {
+        setShowSafetyAlert(true);
+    }
+  }, [finalScore]); 
+
+  useEffect(() => {
     const fetchRouteData = async () => {
       if (stage !== "map" || !user) return
       setIsLoadingRoute(true)
-      
       try {
         const userActiveRef = ref(db, `women/user_active/${user.sub}`)
         const snapshot = await get(userActiveRef)
-        
         if (snapshot.exists()) {
           const data = snapshot.val()
-          
           if (data.start && data.end) {
             setRouteStart({ lat: data.start.start_lat, lng: data.start.start_lng })
             setRouteEnd({ lat: data.end.end_lat, lng: data.end.end_lng })
-  
             if (data.routeId) {
               setActiveRouteId(data.routeId)
               const roomGeoRef = ref(db, `women/routes/${data.routeId}/geoHash`)
-              
               const unsubscribeGeo = onValue(roomGeoRef, (geoSnap) => {
-                if (geoSnap.exists()) {
-                   console.log("📍 GeoHash Found:", geoSnap.val());
-                   setRouteGeoHash(geoSnap.val());
-                }
+                if (geoSnap.exists()) setRouteGeoHash(geoSnap.val());
               });
-
               startLocationTracking(data.routeId)
               roomListenerUnsubscribeRef.current = listenToRoomMembers(data.routeId)
               return () => off(roomGeoRef);
             }
           }
         }
-      } catch (error) {
-        console.error("Error fetching route data:", error)
-      } finally {
-        setIsLoadingRoute(false)
-      }
+      } catch (error) { console.error("Error fetching route data:", error) } 
+      finally { setIsLoadingRoute(false) }
     }
-    
     fetchRouteData()
   }, [stage, user])
-
 
   useEffect(() => {
     if (!activeRouteId) return
@@ -111,43 +204,52 @@ useEffect(() => {
           id: key,
           ...value,
         }))
-
         loadedMessages.sort((a, b) => a.timestamp - b.timestamp)
         setChatMessages(loadedMessages)
-      } else {
-        setChatMessages([])
-      }
+      } else { setChatMessages([]) }
     })
     return () => off(messageRef)
   }, [activeRouteId])
-  console.log("chat messages",chatMessages);
-
-  // --- UPDATED THROTTLE FUNCTION ---
-  // Ensuring it receives the messages correctly when called
+  
+  // --- UPDATED: Throttle Function ---
   const throttle = async () => {
     console.log("Triggering Emergency Throttle...")
+    setIsSosDisabled(true);
+    setShowSafetyAlert(false);
     try {
+      await runTransaction(ref(db, `women/rooms/${activeRouteId}/sos_triggered`), (currentCount) => {
+        return (currentCount || 0) + 1;
+      });
+      
+      // Save WHO triggered it
+      await update(ref(db, `women/rooms/${activeRouteId}`), {
+          sos_user_id: user.sub
+      });
+
       const formattedMessages = chatMessages.map(msg => ({
-        userId: msg.userId,   // From your Firebase data
-        message: msg.text // From your Firebase data
-    }));
-    console.log(formattedMessages);
+        userId: msg.userId,  
+        message: msg.text 
+      }));
+    
       await axios.post(`/api/model/throttle`,{
-        message: formattedMessages, // Uses the current state 'chatMessages'
+        message: formattedMessages, 
         userId: user.sub,
         routeId: activeRouteId
       },{headers:{"Content-Type": "application/json"}}
       )
-      console.log("Emergency agent activated successfully")
     } catch (error) {
       console.log("Error calling emergency agent", error.message)
     }
   }
 
+  const handleConfirmUnsafe = () => {
+    throttle(); 
+    setShowSafetyAlert(false);
+  }
+
   const startLocationTracking = (routeId) => {
     if (!navigator.geolocation) return
     if (geoWatchIdRef.current !== null) navigator.geolocation.clearWatch(geoWatchIdRef.current)
-
     const watchId = navigator.geolocation.watchPosition(
       async (position) => {
         const lat = position.coords.latitude
@@ -190,7 +292,6 @@ useEffect(() => {
     if (!activeRouteId || !user) return
 
     try {
-      // 1. Send to Firebase Realtime DB
       const messagesRef = ref(db, `women/rooms/${activeRouteId}/messages`)
       const newMessageRef = push(messagesRef)
       await set(newMessageRef, {
@@ -201,13 +302,11 @@ useEffect(() => {
         timestamp: serverTimestamp(),
       })
 
-      // 2. Backup to Firestore
       await axios.post(`/api/room/room_data`, {
           roomId: activeRouteId,
           userId: user.sub,
           message: messageText,
-        },
-        { headers: { "Content-Type": "application/json" } }
+        }, { headers: { "Content-Type": "application/json" } }
       )
 
       const recentHistory = chatMessages.slice(-10).map(msg => ({
@@ -215,78 +314,47 @@ useEffect(() => {
           message: msg.text 
       }));
 
-      // ---------------------------------------------------------
-      // 🔴 FIX 1: Corrected Capitalization ('M') to match Python
-      // ---------------------------------------------------------
       const response = await axios.post(`/api/model/agent1`, {
         roomId: activeRouteId,
         messages: recentHistory,
-        currentUserMessage: messageText, // ✅ Capital 'M'
+        currentUserMessage: messageText, 
         currentUserId: user.sub,
       });
 
       const { final_score } = response.data;
-      setfinalScore(final_score); // Ensure state name matches your state variable
-
-      // Save to Global Room Score
       const baseRef = ref(db, `women/rooms/${activeRouteId}/finalScore`);
       if (final_score !== undefined && final_score !== null) {
         await set(baseRef, { score: final_score });
       }
 
-      // ---------------------------------------------------------
-      // 🔴 FIX 2: Removed Duplicate Block
-      // We only write to 'localroom' ONCE and capture the key
-      // ---------------------------------------------------------
       let newScoreKey = null;
-
       if(final_score){
         const localScoreListRef = ref(db, `women/localroom/${routeGeoHash}/${activeRouteId}/finalScore`);
         const newScoreRef = push(localScoreListRef); 
-        
-        newScoreKey = newScoreRef.key; // Capture key for logic below
-        
+        newScoreKey = newScoreRef.key; 
         await update(newScoreRef, { score: final_score })
       }
 
-      // 3. Fetch Area Data & Agent 2 Call
       const snapshot = await get(ref(db, `women/localroom/${routeGeoHash}`));
       const result = {};
-
       if (snapshot.exists()) {
         const routes = snapshot.val();
-
         for (const routeId in routes) {
           const finalScoreNode = routes[routeId].finalScore; 
           if (!finalScoreNode) continue;
-
           let scoresArray = Object.values(finalScoreNode).map(e => e.score);
-          
-          // Optimistic Merging Logic
           if (routeId === activeRouteId && newScoreKey) {
              const isMyScoreAlreadyHere = finalScoreNode.hasOwnProperty(newScoreKey);
-             
-             if (!isMyScoreAlreadyHere && final_score) {
-                 scoresArray.push(final_score);
-             }
+             if (!isMyScoreAlreadyHere && final_score) scoresArray.push(final_score);
           }
           result[routeId] = scoresArray;
         }
       } else {
-        if (final_score) {
-           result[activeRouteId] = [final_score];
-        }
+        if (final_score) result[activeRouteId] = [final_score];
       }
-      console.log("array being send to model",result)
-      // Call Agent 2
-      const response_agent2 = await axios.post(`/api/model/agent2`, {
-        payload: result,
-      });
+      const response_agent2 = await axios.post(`/api/model/agent2`, { payload: result });
       console.log("Agent 2 Analysis:", response_agent2.data);
-
-    } catch (error) {
-      console.error("Error sending message or analyzing:", error)
-    }
+    } catch (error) { console.error("Error sending message or analyzing:", error) }
   }
 
   const handleCommuteComplete = () => setStage("map")
@@ -311,12 +379,6 @@ useEffect(() => {
                 <p className="text-xs text-zinc-400">Women Safety - Commute Planning</p>
               </div>
             </div>
-            {currentLocation && (
-              <Badge className="gap-2 bg-green-600 text-white border-0">
-                <Navigation className="h-3 w-3" />
-                Location Active
-              </Badge>
-            )}
           </div>
         </header>
         <div className="flex-1">
@@ -326,14 +388,14 @@ useEffect(() => {
     )
   }
 
-  // --- STAGE 3: MAP & CHAT ---
+  const uiStyles = getScoreUI(finalScore, sosTriggerCount, isSosDisabled);
+
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
-      {/* HEADER */}
-      <header className="border-b border-zinc-800 bg-zinc-900">
+    <div className="h-screen bg-zinc-950 flex flex-col relative overflow-hidden"> 
+      <header className="border-b border-zinc-800 bg-zinc-900 shrink-0">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")} className="text-zinc-400 hover:text-white mr-2 p-0">
+            <Button variant="ghost" size="sm" onClick={handleExit} className="text-zinc-400 hover:text-white mr-2 p-0">
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="h-10 w-10 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -344,30 +406,41 @@ useEffect(() => {
               <p className="text-xs text-zinc-400">Community Safety Dashboard</p>
             </div>
           </div>
-          {currentLocation && (
-            <Badge className="gap-2 bg-green-600 text-white border-0">
-              <Navigation className="h-3 w-3" />
-              Location Active
-            </Badge>
-          )}
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-500 ${uiStyles.bg}`}>
+                <div className={`h-2.5 w-2.5 rounded-full transition-all duration-500 ${uiStyles.dot}`} />
+                <span className={`text-sm font-semibold transition-colors duration-500 ${uiStyles.color}`}>
+                    {uiStyles.text}
+                </span>
+            </div>
+
+            {currentLocation && (
+              <Badge className="gap-2 bg-zinc-800 text-zinc-300 border-zinc-700">
+                <Navigation className="h-3 w-3" />
+                Live
+              </Badge>
+            )}
+          </div>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL - CHAT */}
-        <div className="w-96 border-r border-zinc-800 bg-zinc-900 h-full">
+      <div className="flex-1 flex overflow-hidden relative">
+        <div className="w-96 border-r border-zinc-800 bg-zinc-900 h-full flex flex-col z-10 relative shadow-xl">
           <ChatSidePanel 
             messages={chatMessages}
             currentUser={user}
             onSendMessage={pushMessage}
-            onClose={handleCloseMap}
+            onClose={handleExit} 
             routeId={activeRouteId}
-            onThrottle={throttle} /* PASSING THE FUNCTION HERE */
+            onThrottle={throttle} 
+            isSosDisabled={isSosDisabled} 
+            finalScore={finalScore}
+            otherUsers={otherUsers}
+            sosTriggerCount={sosTriggerCount} 
           />
         </div>
 
-        {/* MAP */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative bg-zinc-900">
           <GoogleMapComponent
             selectedFeature={feature.id}
             isLoadingLocation={isLoadingRoute}
@@ -376,9 +449,35 @@ useEffect(() => {
             currentUserLocation={currentLocation}
             currentUser={user}
             otherUsers={otherUsers}
+            sosTriggerCount={sosTriggerCount} /* PASSED TO MAP */
+            sosUserId={sosUserId}             /* PASSED TO MAP */
           />
         </div>
       </div>
+
+      {showSafetyAlert && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-red-500/50 rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white mb-2">Safety Check</h3>
+                <p className="text-zinc-300 text-sm leading-relaxed mb-4">
+                  The safety score for this area has dropped.
+                  <br /><br />
+                  <span className="font-semibold text-white">Are you feeling unsafe?</span>
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setShowSafetyAlert(false)} className="text-zinc-400 hover:text-white hover:bg-zinc-800">No, I'm fine</Button>
+                  <Button onClick={handleConfirmUnsafe} className="bg-red-600 hover:bg-red-700 text-white border-0">Yes, Report Issue</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

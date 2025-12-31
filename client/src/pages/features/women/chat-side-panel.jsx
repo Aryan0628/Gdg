@@ -1,151 +1,171 @@
-import { useState, useRef, useEffect } from "react"
-import { Button } from "../../../ui/button"
+import { useState, useEffect, useRef } from "react"
+import { Send, AlertOctagon, ShieldAlert, Users } from "lucide-react"
+import { Button } from "../../../ui/button" // Keeping this for the normal Send button
 import { Input } from "../../../ui/input"
-import { Send, X, AlertTriangle } from "lucide-react" // Added AlertTriangle icon
+import { ScrollArea } from "../../../ui/scroll-area"
+import { Avatar, AvatarFallback, AvatarImage } from "../../../ui/avatar"
 
 export default function ChatSidePanel({ 
-  messages = [], 
+  messages, 
   currentUser, 
   onSendMessage, 
-  onClose,
-  routeId,
-  onThrottle // Receiving the prop
+  onClose, 
+  routeId, 
+  onThrottle,
+  isSosDisabled, 
+  finalScore,
+  otherUsers,
+  sosTriggerCount 
 }) {
   const [newMessage, setNewMessage] = useState("")
-  const [isThrottled, setIsThrottled] = useState(false) // Local state to handle disable
-  const messagesEndRef = useRef(null)
+  const scrollRef = useRef(null)
 
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: "smooth" })
+    }
   }, [messages])
 
-  const handleSend = (e) => {
-    e.preventDefault()
+  const handleSend = () => {
     if (!newMessage.trim()) return
-    
     onSendMessage(newMessage)
     setNewMessage("")
   }
 
-  // Handle Throttle Click
-  const handleThrottleClick = () => {
-    if (onThrottle) {
-      onThrottle(); // Call the parent function
-      setIsThrottled(true); // Disable button immediately
+  // --- 1. THEME LOGIC ---
+  const getPanelTheme = () => {
+    if (finalScore === null) return "border-zinc-800 bg-zinc-900";
+    const s = Number(finalScore);
+
+    // Red Theme if Critical
+    if (isSosDisabled || sosTriggerCount > 0 || s < 4) {
+      return "border-red-600 shadow-[inset_0_0_30px_rgba(220,38,38,0.15)] bg-zinc-950";
     }
+    // Amber Theme if Warning
+    if (s < 7) {
+      return "border-amber-500 shadow-[inset_0_0_30px_rgba(245,158,11,0.1)] bg-zinc-950";
+    }
+    // Green/Default Theme
+    return "border-emerald-500/30 bg-zinc-950";
   }
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) return ""
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })
+  // --- 2. WATERMARK LOGIC ---
+  const getWatermark = () => {
+    if (sosTriggerCount > 0 || isSosDisabled) {
+      return {
+        text: "ROUTE ON HIGH ALERT\nAUTHORITIES INFORMED",
+        color: "text-red-600/20",
+        icon: <AlertOctagon className="w-24 h-24 text-red-600/20 mb-4 animate-pulse" />
+      };
+    }
+    if (finalScore !== null && Number(finalScore) < 4) {
+      return {
+        text: "CRITICAL DANGER DETECTED\nSTAY ALERT",
+        color: "text-red-600/20",
+        icon: <ShieldAlert className="w-24 h-24 text-red-600/20 mb-4 animate-pulse" />
+      };
+    }
+    if (finalScore !== null && Number(finalScore) < 7) {
+      return {
+        text: "ROUTE UNDER SURVEILLANCE\nPRESS THROTTLE IF THREATENED",
+        color: "text-amber-500/10",
+        icon: <ShieldAlert className="w-24 h-24 text-amber-500/10 mb-4" />
+      };
+    }
+    return null;
   }
+
+  const themeClasses = getPanelTheme();
+  const watermark = getWatermark();
+  const activeCount = otherUsers ? otherUsers.length : 0;
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900 border-r border-zinc-800 w-full">
-      {/* HEADER */}
-      <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50 backdrop-blur">
-        <div>
-          <h2 className="text-white font-semibold flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-            </span>
-            Live Commute
+    <div className={`flex flex-col h-full border-r transition-all duration-500 relative overflow-hidden ${themeClasses}`}>
+      
+      {/* BACKGROUND WATERMARK */}
+      {watermark && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0 select-none p-6 text-center">
+          {watermark.icon}
+          <h2 className={`text-2xl font-black uppercase tracking-widest leading-relaxed ${watermark.color}`}>
+            {watermark.text}
           </h2>
-          <p className="text-xs text-zinc-400">Route ID: #{routeId?.slice(-4) || "..."}</p>
         </div>
-        
-        {/* ACTIONS: Throttle Button + Close */}
-        <div className="flex items-center gap-2">
-          <Button 
-            variant={isThrottled ? "secondary" : "destructive"} 
-            size="sm" 
-            onClick={handleThrottleClick}
-            disabled={isThrottled}
-            className={`font-bold transition-all ${isThrottled ? "bg-zinc-700 text-zinc-400" : "bg-red-600 hover:bg-red-700 animate-pulse"}`}
-          >
-            <AlertTriangle className="h-4 w-4 mr-1" />
-            {isThrottled ? "Alert Sent" : "SOS"}
-          </Button>
-          
-          <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white">
-            <X className="h-4 w-4" />
-          </Button>
+      )}
+
+      {/* --- HEADER --- */}
+      <div className="p-4 border-b border-zinc-800 bg-zinc-900/90 backdrop-blur-md z-20 shrink-0 flex items-center justify-between shadow-sm">
+        <div>
+          <h2 className="font-bold text-white tracking-tight text-sm uppercase">Live Route Chat</h2>
+          <div className="flex items-center gap-2 mt-1 bg-zinc-900/50 w-fit px-2 py-0.5 rounded border border-zinc-800">
+             <div className="relative flex h-2 w-2">
+               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+             </div>
+             <span className="text-[10px] font-medium text-zinc-400 flex items-center gap-1">
+               {activeCount} Active
+             </span>
+          </div>
         </div>
+
+        {/* --- GLOWING SOS BUTTON (FIXED: Using raw HTML button to avoid style conflicts) --- */}
+        <button
+          onClick={onThrottle}
+          disabled={isSosDisabled}
+          className={`h-9 px-6 rounded-md font-black tracking-widest text-sm transition-all duration-300 border ${
+            isSosDisabled 
+              ? "bg-zinc-800 text-red-900 border-red-900/30 cursor-not-allowed shadow-none" 
+              : "bg-red-600 text-white border-transparent shadow-[0_0_20px_rgba(220,38,38,0.8)] hover:bg-red-500 hover:shadow-[0_0_35px_rgba(220,38,38,1)] active:scale-95"
+          }`}
+        >
+          {isSosDisabled ? "SENT" : "SOS"}
+        </button>
+
       </div>
 
       {/* MESSAGES AREA */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="text-center text-zinc-500 mt-10 text-sm">
-            <p>👋 Start the conversation!</p>
-            <p className="text-xs mt-1">Share updates about your safety status.</p>
-          </div>
-        ) : (
-          messages.map((msg) => {
+      <ScrollArea className="flex-1 p-4 z-10">
+        <div className="space-y-4">
+          {messages.map((msg) => {
             const isMe = msg.userId === currentUser.sub
             return (
-              <div
-                key={msg.id}
-                className={`flex gap-3 ${isMe ? "flex-row-reverse" : "flex-row"}`}
-              >
-                {/* PROFILE PICTURE */}
-                <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full overflow-hidden border border-zinc-700">
-                    <img 
-                      src={isMe ? (currentUser.profileurl || currentUser.picture) : "https://github.com/shadcn.png"} 
-                      alt="User" 
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                </div>
-
-                {/* MESSAGE BUBBLE */}
-                <div className={`flex flex-col max-w-[75%] ${isMe ? "items-end" : "items-start"}`}>
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xs font-medium text-zinc-300">
-                      {isMe ? "You" : msg.userName}
-                    </span>
-                    <span className="text-[10px] text-zinc-500">
-                      {formatTime(msg.timestamp)}
-                    </span>
-                  </div>
-                  <div
-                    className={`rounded-2xl px-4 py-2 text-sm ${
-                      isMe
-                        ? "bg-blue-600 text-white rounded-tr-sm"
-                        : "bg-zinc-800 text-zinc-100 rounded-tl-sm border border-zinc-700"
-                    }`}
-                  >
+              <div key={msg.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                <Avatar className="h-8 w-8 border border-zinc-700/50 shadow-sm">
+                  <AvatarImage src={msg.userImage} />
+                  <AvatarFallback className="bg-zinc-800 text-[10px] text-zinc-400 font-bold">
+                    {msg.userName?.charAt(0) || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className={`flex flex-col max-w-[80%] ${isMe ? "items-end" : "items-start"}`}>
+                  <span className="text-[10px] text-zinc-500 mb-1 px-1">{msg.userName}</span>
+                  <div className={`rounded-2xl px-4 py-2 text-sm shadow-md backdrop-blur-sm ${
+                    isMe 
+                    ? "bg-blue-600 text-white rounded-tr-none" 
+                    : "bg-zinc-800/80 text-zinc-200 rounded-tl-none border border-zinc-700/50"
+                  }`}>
                     {msg.text}
                   </div>
+                  <span className="text-[10px] text-zinc-600 mt-1 px-1">
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
               </div>
             )
-          })
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+          })}
+          <div ref={scrollRef} />
+        </div>
+      </ScrollArea>
 
-      {/* INPUT AREA */}
-      <div className="p-4 border-t border-zinc-800 bg-zinc-900">
-        <form onSubmit={handleSend} className="flex gap-2">
+      {/* FOOTER (INPUT ONLY) */}
+      <div className="p-3 bg-zinc-900/90 border-t border-zinc-800 z-20 shrink-0">
+        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
           <Input
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
-            className="bg-zinc-950 border-zinc-800 text-white focus-visible:ring-blue-600"
+            className="bg-zinc-950/50 border-zinc-800 text-white focus-visible:ring-blue-600/50 h-10 shadow-inner"
           />
-          <Button 
-            type="submit" 
-            size="icon" 
-            className="bg-blue-600 hover:bg-blue-500 text-white shrink-0"
-            disabled={!newMessage.trim()}
-          >
+          {/* Keeping standard Button here is fine as blue is desired for send */}
+          <Button type="submit" className="h-10 w-10 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-900/20 shrink-0 p-0 flex items-center justify-center">
             <Send className="h-4 w-4" />
           </Button>
         </form>

@@ -181,7 +181,7 @@ export const saveRouteToDatabase = async (routeData) => {
     /* ---------------- 5. LOCAL ROOM CLUSTERING ---------------- */
     // Path: women/localrooms/${geohashId}/${roomId}/
     
-    const localRoomsRef = ref(db, "women/localrooms");
+    const localRoomsRef = ref(db, "women/localroom");
     const localRoomsSnap = await get(localRoomsRef);
 
     let alreadyInLocalRoom = false;

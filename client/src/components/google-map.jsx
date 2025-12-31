@@ -1,8 +1,6 @@
 import { useState, useCallback, memo, useEffect, useMemo } from "react"
 import { GoogleMap, Marker, useJsApiLoader, OverlayView } from "@react-google-maps/api"
-import { Loader2, MapPin, AlertCircle } from "lucide-react"
-import { Button } from "../ui/button";
-
+import { Loader2, MapPin, AlertCircle, ShieldAlert } from "lucide-react"
 
 const mapContainerStyle = {
   width: "100%",
@@ -17,7 +15,7 @@ const defaultCenter = {
 const mapOptions = {
   disableDefaultUI: false,
   zoomControl: true,
-  streetViewControl: true,
+  streetViewControl: false,
   mapTypeControl: false,
   fullscreenControl: false,
   styles: [
@@ -30,39 +28,80 @@ const mapOptions = {
   ],
 }
 
-// Memoized Current User Marker - Only updates when currentUserLocation or currentUser changes
-const CurrentUserMarker = memo(({ currentUserLocation, currentUser }) => {
-  if (!currentUserLocation || !currentUser) return null
-  
+// --- 1. CURRENT USER MARKER (ME) ---
+const CurrentUserMarker = memo(({ currentUserLocation, userImage, isMySos }) => {
+  if (!currentUserLocation) return null;
+
   return (
     <OverlayView
       position={currentUserLocation}
       mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
     >
-      <div className="relative">
-        <div className="w-12 h-12 rounded-full border-3 border-blue-500 bg-blue-600 flex items-center justify-center shadow-lg overflow-hidden">
-          {currentUser.picture ? (
+      {/* Container with high Z-index to stay on top */}
+      <div className="relative flex items-center justify-center z-[1000]">
+        
+        {/* Red Pulse Animation (Absolute position BEHIND the image) */}
+        {isMySos && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+            <div className="w-24 h-24 bg-red-500/30 rounded-full animate-ping" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-red-500/50 rounded-full animate-pulse" />
+          </div>
+        )}
+
+        {/* Profile Picture Circle */}
+        <div 
+          className={`
+            relative z-10 w-14 h-14 rounded-full flex items-center justify-center overflow-hidden bg-zinc-800 transition-all duration-300
+            ${isMySos 
+              ? "border-[3px] border-red-600 shadow-[0_0_25px_rgba(220,38,38,1)] scale-110" 
+              : "border-[3px] border-white shadow-lg ring-2 ring-blue-500/30"
+            }
+          `}
+        >
+          {userImage ? (
             <img
-              src={currentUser.picture}
-              alt="Your Location"
+              src={userImage}
+              alt="Me"
               className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
             />
           ) : (
-            <MapPin className="w-6 h-6 text-white" />
+            <div className="w-full h-full bg-blue-600 flex items-center justify-center">
+               <MapPin className="w-6 h-6 text-white" />
+            </div>
           )}
         </div>
-        <div className="absolute -bottom-2 -right-2 w-5 h-5 bg-green-500 rounded-full border-2 border-white" />
+
+        {/* Status Badge Icon */}
+        {isMySos && (
+          <div className="absolute -bottom-1 -right-1 z-20 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center bg-red-600 animate-bounce">
+              <ShieldAlert className="w-3 h-3 text-white" />
+          </div>
+        )}
       </div>
     </OverlayView>
   )
 })
 CurrentUserMarker.displayName = "CurrentUserMarker"
 
-// Memoized Other Users Markers - Only updates when otherUsers changes
-const OtherUsersMarkers = memo(({ otherUsers }) => {
+// --- 2. OTHER USERS MARKERS (THEM) ---
+const OtherUsersMarkers = memo(({ otherUsers, sosTriggerCount, sosUserId, currentUserId }) => {
+  
+  const visibleUsers = useMemo(() => {
+    // 1. If SOS is OFF -> Show NO ONE.
+    if (!sosTriggerCount || sosTriggerCount === 0) return [];
+    
+    // 2. Filter: Show user ONLY if they are the SOS triggerer AND NOT ME
+    return otherUsers.filter(u => {
+        const isSOSUser = String(u.userId) === String(sosUserId);
+        const isNotMe = String(u.userId) !== String(currentUserId);
+        return isSOSUser && isNotMe;
+    });
+  }, [otherUsers, sosTriggerCount, sosUserId, currentUserId]);
+
   return (
     <>
-      {otherUsers.map((member) => (
+      {visibleUsers.map((member) => (
         <OverlayView
           key={member.userId}
           position={{
@@ -71,15 +110,22 @@ const OtherUsersMarkers = memo(({ otherUsers }) => {
           }}
           mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
         >
-          <div className="relative">
-            <div className="w-10 h-10 rounded-full border-2 border-purple-400 bg-purple-600 flex items-center justify-center shadow-lg overflow-hidden">
-              <MapPin className="w-5 h-5 text-white" />
+          <div className="relative flex items-center justify-center z-[500]">
+            {/* Red Pulse */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+                <div className="w-28 h-28 bg-red-600/40 rounded-full animate-ping" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-red-600/60 rounded-full animate-pulse" />
             </div>
-            <div
-              className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
-                member.status === "active" ? "bg-green-500" : "bg-gray-500"
-              }`}
-            />
+
+            {/* Red Icon (No Profile Pic) */}
+            <div className="relative z-10 w-12 h-12 rounded-full border-4 border-red-500 bg-red-800 flex items-center justify-center shadow-[0_0_40px_rgba(220,38,38,1)]">
+              <AlertCircle className="w-7 h-7 text-white animate-pulse" />
+            </div>
+
+            {/* Label */}
+            <div className="absolute -bottom-9 bg-red-700 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg border border-red-500 uppercase tracking-widest whitespace-nowrap">
+              SOS ACTIVE
+            </div>
           </div>
         </OverlayView>
       ))}
@@ -95,7 +141,9 @@ function GoogleMapComponent({
   routeEnd, 
   currentUserLocation,
   currentUser,
-  otherUsers = []
+  otherUsers = [],
+  sosTriggerCount, 
+  sosUserId        
 }) {
   const [map, setMap] = useState(null)
 
@@ -103,10 +151,13 @@ function GoogleMapComponent({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY ,
   })
 
+  // Extract simple props to pass to memoized components
+  const userImage = currentUser?.picture || currentUser?.photoURL || currentUser?.profileurl;
+  const currentUserId = currentUser?.sub;
+  const isMySos = sosTriggerCount > 0 && String(sosUserId) === String(currentUserId);
+
   const onLoad = useCallback((mapInstance) => {
     setMap(mapInstance)
-    
-    // Fit bounds to include both route markers if they exist
     if (routeStart && routeEnd && mapInstance) {
       const bounds = new window.google.maps.LatLngBounds()
       bounds.extend(new window.google.maps.LatLng(routeStart.lat, routeStart.lng))
@@ -119,7 +170,6 @@ function GoogleMapComponent({
     setMap(null)
   }, [])
 
-  // Update map bounds when route changes (initial view)
   useEffect(() => {
     if (map && routeStart && routeEnd) {
       const bounds = new window.google.maps.LatLngBounds()
@@ -129,7 +179,6 @@ function GoogleMapComponent({
     }
   }, [map, routeStart, routeEnd])
 
-  // Auto-center map on current user location as they move
   useEffect(() => {
     if (map && currentUserLocation) {
       map.panTo({
@@ -145,9 +194,7 @@ function GoogleMapComponent({
       <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
         <div className="text-center space-y-4 max-w-md px-6">
           <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto" />
-          <p className="text-sm font-medium text-white">
-            Google Maps API Key Required
-          </p>
+          <p className="text-sm font-medium text-white">Google Maps API Key Required</p>
         </div>
       </div>
     )
@@ -156,10 +203,7 @@ function GoogleMapComponent({
   if (!isLoaded) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-sm text-zinc-400">Loading Google Maps...</p>
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     )
   }
@@ -172,50 +216,48 @@ function GoogleMapComponent({
         </div>
       )}
 
-      {!routeStart && !routeEnd && !isLoadingLocation && (
-        <div className="absolute inset-0 bg-black/80 z-10 flex items-center justify-center">
-          <div className="text-center">
-            <MapPin className="h-12 w-12 text-zinc-500 mx-auto" />
-            <p className="text-sm text-white">Loading route data...</p>
-          </div>
-        </div>
-      )}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={currentUserLocation || routeStart || defaultCenter}
-        defaultZoom={12}
+        defaultZoom={15}
         onLoad={onLoad}
         onUnmount={onUnmount}
         options={mapOptions}
       >
-        {/* Route Start Marker */}
-        {routeStart && (
-          <Marker
-            position={routeStart}
-            title={`Start: ${routeStart.lat.toFixed(4)}, ${routeStart.lng.toFixed(4)}`}
-            icon="http://maps.google.com/mapfiles/ms/icons/green-dot.png"
-          />
-        )}
-        
-        {/* Route End Marker */}
-        {routeEnd && (
-          <Marker
-            position={routeEnd}
-            title={`Destination: ${routeEnd.lat.toFixed(4)}, ${routeEnd.lng.toFixed(4)}`}
-            icon="http://maps.google.com/mapfiles/ms/icons/green-dot.png"
-          />
-        )}
+        {routeStart && <Marker position={routeStart} icon="http://maps.google.com/mapfiles/ms/icons/green-dot.png" />}
+        {routeEnd && <Marker position={routeEnd} icon="http://maps.google.com/mapfiles/ms/icons/green-dot.png" />}
 
-        {/* Current User Live Marker - Only updates when location changes */}
-        <CurrentUserMarker currentUserLocation={currentUserLocation} currentUser={currentUser} />
+        {/* MY MARKER */}
+        <CurrentUserMarker 
+            currentUserLocation={currentUserLocation} 
+            userImage={userImage}
+            isMySos={isMySos}
+        />
 
-        {/* Other Users Live Markers - Only updates when other users change */}
-        <OtherUsersMarkers otherUsers={otherUsers} />
+        {/* OTHER MARKERS */}
+        <OtherUsersMarkers 
+            otherUsers={otherUsers} 
+            sosTriggerCount={sosTriggerCount}
+            sosUserId={sosUserId}
+            currentUserId={currentUserId}
+        />
       </GoogleMap>
 
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-        <div className="bg-zinc-900 px-4 py-2 rounded-full">
-          <p className="text-xs text-white">Route visualization - Start and Destination markers</p>
+      {/* Floating Status Bar */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
+        <div className={`
+            px-4 py-2 rounded-full shadow-xl backdrop-blur border transition-all duration-500
+            ${sosTriggerCount > 0 
+                ? "bg-red-900/90 border-red-500 animate-pulse" 
+                : "bg-zinc-900/90 border-zinc-800"
+            }
+        `}>
+          <p className={`
+              text-[10px] uppercase font-bold tracking-widest 
+              ${sosTriggerCount > 0 ? "text-red-100" : "text-zinc-400"}
+          `}>
+            {sosTriggerCount > 0 ? "⚠️ Emergency Mode Active" : "🛡️ Secure Route Monitoring"}
+          </p>
         </div>
       </div>
     </>
