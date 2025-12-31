@@ -65,22 +65,7 @@ export function SafetyOnboarding({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start gap-4">
-            <div className={`h-14 w-14 rounded-xl ${feature.bgColor} flex items-center justify-center`}>
-              <Icon className={`h-7 w-7 ${feature.color}`} />
-            </div>
-            <div className="flex-1">
-              <CardTitle className="text-2xl mb-1">{feature.title}</CardTitle>
-              <CardDescription>{feature.description}</CardDescription>
-              <Badge variant="outline" className="mt-3">
-                {feature.stats}
-              </Badge>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
+    
 
       {/* Location Permission */}
       {!userLocation ? (
@@ -154,9 +139,12 @@ export function SafetyOnboarding({
                 <p className="text-sm text-muted-foreground">
                   Join {feature.title} to access live map tracking and reporting
                 </p>
-                <Button onClick={onJoinComplete} className="w-full">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Join {feature.title}
+                <Button
+                  onClick={onJoinComplete}
+                  className="w-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center gap-2 px-1 py-1 text-lg font-bold"
+                >
+                  <feature.icon className="h-4 w-4" />
+                  <span>Join {feature.title}</span>
                 </Button>
               </CardContent>
             </Card>

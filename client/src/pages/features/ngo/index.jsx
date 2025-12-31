@@ -1,15 +1,15 @@
 import { useState } from "react"
 import { Button } from "../../../ui/button"
 import { Badge } from "../../../ui/badge"
-import { Navigation, X, ArrowLeft } from "lucide-react"
+import { Navigation, ChevronLeft, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import GoogleMapComponent from "../../../components/google-map"
 import FeaturePanel from "../../../components/feature-panel"
 import { NGO_FEATURE } from "./config"
+import FloatingLines from "../../../ui/FloatingLines"
 
-export default function NGOPage() {
+export default function NgoPage() {
   const [userLocation, setUserLocation] = useState(null)
-  const [locationPermission, setLocationPermission] = useState("prompt")
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const navigate = useNavigate()
 
@@ -22,15 +22,12 @@ export default function NGOPage() {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject)
       })
-
       setUserLocation({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
       })
-      setLocationPermission("granted")
     } catch (error) {
       console.error("Location permission denied:", error)
-      setLocationPermission("denied")
     } finally {
       setIsLoadingLocation(false)
     }
@@ -38,15 +35,15 @@ export default function NGOPage() {
 
   return (
     <div className="min-h-screen bg-zinc-950 flex flex-col">
-      {/* HEADER */}
-      <header className="border-b border-zinc-800 bg-zinc-900">
+      {/* GLOBAL HEADER */}
+      <header className="border-b border-zinc-800 bg-zinc-900 z-20">
         <div className="px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate("/dashboard")}
-              className="text-zinc-400 hover:text-white mr-2 p-0"
+              className="text-zinc-400 hover:text-white mr-2 p-0 border-none shadow-none hover:bg-transparent"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -55,12 +52,9 @@ export default function NGOPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">UrbanFlow</h1>
-              <p className="text-xs text-zinc-400">
-                Community Safety Dashboard
-              </p>
+              <p className="text-xs text-zinc-400">Community Safety Dashboard</p>
             </div>
           </div>
-
           {userLocation && (
             <Badge className="gap-2 bg-green-600 text-white border-0">
               <Navigation className="h-3 w-3" />
@@ -72,42 +66,51 @@ export default function NGOPage() {
 
       {/* BODY */}
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL */}
-        <div className="w-96 overflow-y-auto border-r border-zinc-800 bg-zinc-900">
-          <div className="p-6 space-y-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                navigate("/dashboard")
-              }}
-              className="mb-4 text-zinc-400 hover:text-white"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Close Map View
-            </Button>
+        <div className="w-96 overflow-y-auto border-r border-zinc-800 bg-slate-900 relative">
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <FloatingLines />
+          </div>
+          <div className="relative z-10 p-6 space-y-6">
+            <div className="flex items-start gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/dashboard")}
+                className="text-zinc-400 hover:text-white p-0 h-auto w-auto border-none shadow-none hover:bg-transparent"
+              >
+                <ChevronLeft className="h-8 w-8" />
+              </Button>
+              <div className="space-y-1">
+                <h2 className="text-3xl font-bold text-white tracking-tight leading-none">
+                  {feature.title}
+                </h2>
+                <p className="text-sm text-zinc-400">
+                  {feature.description}
+                </p>
+              </div>
+            </div>
 
+            {/* FEATURE CONTENT */}
             {needsOnboarding ? null : (
               <FeaturePanel
                 feature={feature}
                 userLocation={userLocation}
                 isLoadingLocation={isLoadingLocation}
                 onRequestLocation={requestLocation}
+                hideHeaderCard={true}
               />
             )}
           </div>
         </div>
 
         {/* MAP */}
-        {!needsOnboarding ? (
-          <div className="flex-1 relative">
-            <GoogleMapComponent
-              userLocation={userLocation}
-              selectedFeature={feature.id}
-              isLoadingLocation={isLoadingLocation}
-            />
-          </div>
-        ) : null}
+        <div className="flex-1 relative">
+          <GoogleMapComponent
+            userLocation={userLocation}
+            selectedFeature={feature.id}
+            isLoadingLocation={isLoadingLocation}
+          />
+        </div>
       </div>
     </div>
   )
