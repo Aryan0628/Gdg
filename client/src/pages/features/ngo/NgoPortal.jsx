@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
+
 import {
   Card,
   CardContent,
@@ -11,6 +14,7 @@ import { Button } from "../../../ui/button";
 import { Badge } from "../../../ui/badge";
 import { Input } from "../../../ui/input";
 import { Textarea } from "../../../ui/textarea";
+
 import {
   MapPin,
   Heart,
@@ -32,11 +36,17 @@ export default function NgoPortal({
   onLocationUpdate,
   onMapVisibilityChange,
 }) {
+  /* ================= AUTH ================= */
+  const { getAccessTokenSilently } = useAuth0();
+
   /* ================= STATE ================= */
   const [userType, setUserType] = useState(null); // donor | recipient
+  const [donorView, setDonorView] = useState(null); // null | post
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [locationMethod, setLocationMethod] = useState(null);
   const [donations, setDonations] = useState([]);
+
+  const navigate = useNavigate();
 
   const [donationForm, setDonationForm] = useState({
     description: "",
@@ -123,27 +133,42 @@ export default function NgoPortal({
 
   const resetState = () => {
     setUserType(null);
+    setDonorView(null);
     setSelectedCategory(null);
     setLocationMethod(null);
     setDonations([]);
     onMapVisibilityChange?.(false);
   };
 
-  /* ================= INTEREST ================= */
+  /* ================= INTEREST (RECIPIENT) ================= */
 
-  const handleInterest = async (donationId) => {
+  const handleInterest = async (donation) => {
     try {
-      await axios.post("/api/interests", { donationId });
+      const token = await getAccessTokenSilently();
+
+      await axios.post(
+        "/api/interests",
+        { donationId: donation.id },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
       alert("Interest sent. Waiting for donor approval.");
-    } catch {
+    } catch (err) {
+      console.error(err.response?.data || err);
       alert("Failed to send interest");
     }
   };
 
-  /* ================= SUBMIT DONATION ================= */
+  /* ================= SUBMIT DONATION (DONOR) ================= */
 
   const handleSubmitDonation = async () => {
     try {
+      const token = await getAccessTokenSilently();
+
       if (!donationForm.description || !donationForm.time || !locationMethod) {
         alert("Please fill all fields");
         return;
@@ -152,38 +177,32 @@ export default function NgoPortal({
       let lat, lng, address;
 
       if (locationMethod === "current") {
-        if (!userLocation) {
-          alert("Location not available yet");
-          return;
-        }
         lat = userLocation.lat;
         lng = userLocation.lng;
         address = await reverseGeocode(lat, lng);
-      }
-
-      if (locationMethod === "manual") {
-        if (!donationForm.location) {
-          alert("Please enter address");
-          return;
-        }
+      } else {
         const coords = await geocodeAddress(donationForm.location);
-        if (!coords) {
-          alert("Invalid address");
-          return;
-        }
         lat = coords.lat;
         lng = coords.lng;
         address = donationForm.location;
       }
 
-      await axios.post("/api/donations", {
-        category: selectedCategory,
-        description: donationForm.description,
-        address,
-        lat,
-        lng,
-        time: donationForm.time,
-      });
+      await axios.post(
+        "/api/donations",
+        {
+          category: selectedCategory,
+          description: donationForm.description,
+          address,
+          lat,
+          lng,
+          time: donationForm.time,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       alert("Donation posted successfully!");
       setDonationForm({ description: "", location: "", time: "" });
@@ -214,9 +233,16 @@ export default function NgoPortal({
       {!userType && (
         <Card>
           <CardContent className="space-y-2">
-            <Button className="w-full" onClick={() => setUserType("donor")}>
+            <Button
+              className="w-full"
+              onClick={() => {
+                setUserType("donor");
+                setDonorView(null);
+              }}
+            >
               <HandHeart className="mr-2" /> I Want to Donate
             </Button>
+
             <Button className="w-full" onClick={() => setUserType("recipient")}>
               <Package className="mr-2" /> I Need Help
             </Button>
@@ -224,8 +250,53 @@ export default function NgoPortal({
         </Card>
       )}
 
-      {/* CATEGORY */}
-      {userType && !selectedCategory && (
+      {/* DONOR MENU */}
+      {userType === "donor" && donorView === null && (
+        <Card>
+          <CardHeader>
+            <Button variant="ghost" onClick={resetState}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+            </Button>
+            <CardTitle>Donor Options</CardTitle>
+          </CardHeader>
+
+          <CardContent className="space-y-3">
+            <Button className="w-full" onClick={() => setDonorView("post")}>
+              📦 Post a Donation
+            </Button>
+
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={() => navigate("/ngo/inbox")}
+            >
+              📥 View Interest Requests
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* CATEGORY — DONOR */}
+      {userType === "donor" && donorView === "post" && !selectedCategory && (
+        <Card>
+          <CardHeader>
+            <Button variant="ghost" onClick={() => setDonorView(null)}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+            </Button>
+            <CardTitle>Select Category</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {categories.map((c) => (
+              <Button key={c.id} onClick={() => setSelectedCategory(c.id)}>
+                <c.icon className="mr-2" /> {c.label}
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* CATEGORY — RECIPIENT */}
+      {userType === "recipient" && !selectedCategory && (
         <Card>
           <CardHeader>
             <Button variant="ghost" onClick={resetState}>
@@ -243,7 +314,7 @@ export default function NgoPortal({
         </Card>
       )}
 
-      {/* RECIPIENT */}
+      {/* RECIPIENT VIEW */}
       {userType === "recipient" && selectedCategory && (
         <Card>
           <CardHeader>
@@ -254,6 +325,8 @@ export default function NgoPortal({
           </CardHeader>
 
           <CardContent className="space-y-3">
+  
+
             {donations.map((d) => (
               <Card key={d.id}>
                 <CardContent className="space-y-2">
@@ -269,13 +342,22 @@ export default function NgoPortal({
                     <MapPin className="mr-2" /> Show on Map
                   </Button>
 
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleInterest(d.id)}
-                  >
-                    I'm Interested
-                  </Button>
+                <Button
+  size="sm"
+  variant="outline"
+  onClick={() => handleInterest(d)}
+>
+  I'm Interested
+</Button>
+
+<Button
+  size="sm"
+  variant="secondary"
+  onClick={() => navigate("/ngo/chats")}
+>
+  💬 My Chats
+</Button>
+
                 </CardContent>
               </Card>
             ))}
@@ -283,11 +365,11 @@ export default function NgoPortal({
         </Card>
       )}
 
-      {/* DONOR */}
-      {userType === "donor" && selectedCategory && (
+      {/* DONOR FORM */}
+      {userType === "donor" && donorView === "post" && selectedCategory && (
         <Card>
           <CardHeader>
-            <Button variant="ghost" onClick={resetState}>
+            <Button variant="ghost" onClick={() => setSelectedCategory(null)}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Back
             </Button>
             <CardTitle>Donate {selectedCategory}</CardTitle>
@@ -298,7 +380,10 @@ export default function NgoPortal({
               placeholder="Donation description"
               value={donationForm.description}
               onChange={(e) =>
-                setDonationForm({ ...donationForm, description: e.target.value })
+                setDonationForm({
+                  ...donationForm,
+                  description: e.target.value,
+                })
               }
             />
 

@@ -4,6 +4,8 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./src/routes/auth.js";
 import donationRoutes from "./src/routes/donation.routes.js";
 import interestRoutes from "./src/routes/interest.routes.js";
+import chatRoutes from "./src/routes/chat.routes.js";
+
 
 const app = express();
 
@@ -24,5 +26,8 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/interests", interestRoutes);
+app.use("/api/chats", chatRoutes);
+
+
 
 export { app };

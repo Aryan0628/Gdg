@@ -1,149 +1,130 @@
 import { db } from "../firebaseadmin/firebaseadmin.js";
-import admin from "firebase-admin";
+import { v4 as uuidv4 } from "uuid";
 
-/* ================= CREATE INTEREST ================= */
+/**
+ * Recipient sends interest
+ * recipientId comes from Auth0
+ */
 export const createInterest = async (req, res) => {
   try {
-    const { donationId, donorId, recipientId } = req.body;
+    const { donationId } = req.body;
 
-    if (!donationId || !donorId || !recipientId) {
-      return res.status(400).json({
-        success: false,
-        message: "donationId, donorId and recipientId are required",
-      });
+    const recipientId = req.auth.payload.sub;
+
+    // get donation to find donor
+    const donationSnap = await db
+      .collection("donations")
+      .doc(donationId)
+      .get();
+
+    if (!donationSnap.exists) {
+      return res.status(404).json({ message: "Donation not found" });
     }
 
-    const interestRef = await db.collection("interests").add({
+    const donation = donationSnap.data();
+    const donorId = donation.donorId;
+
+    const ref = await db.collection("interests").add({
       donationId,
       donorId,
       recipientId,
       status: "pending",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      chatId: null,
+      createdAt: new Date(),
     });
 
-    return res.status(201).json({
-      success: true,
-      interestId: interestRef.id,
-    });
+    res.json({ success: true, interestId: ref.id });
   } catch (err) {
-    console.error("❌ createInterest error:", err);
-    return res.status(500).json({ success: false });
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-/* ================= GET INTERESTS FOR DONOR ================= */
-export const getInterestsForDonor = async (req, res) => {
-  try {
-    const { donorId } = req.params;
-
-    if (!donorId) {
-      return res.status(400).json({ success: false });
-    }
-
-    const snapshot = await db
-      .collection("interests")
-      .where("donorId", "==", donorId)
-      .where("status", "==", "pending")
-      .orderBy("createdAt", "desc")
-      .get();
-
-    const interests = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
-    return res.json({ success: true, data: interests });
-  } catch (err) {
-    console.error("❌ getInterestsForDonor error:", err);
-    return res.status(500).json({ success: false });
-  }
-};
-
-/* ================= ACCEPT INTEREST ================= */
+/**
+ * Donor accepts interest → chat created
+ */
 export const acceptInterest = async (req, res) => {
   try {
     const { interestId } = req.params;
-
-    if (!interestId) {
-      return res.status(400).json({ success: false });
-    }
+    const donorId = req.auth.payload.sub;
 
     const interestRef = db.collection("interests").doc(interestId);
-    const interestSnap = await interestRef.get();
+    const snap = await interestRef.get();
 
-    if (!interestSnap.exists) {
-      return res.status(404).json({
-        success: false,
-        message: "Interest not found",
-      });
+    if (!snap.exists) {
+      return res.status(404).json({ message: "Interest not found" });
     }
 
-    const interest = interestSnap.data();
+    const interest = snap.data();
 
-    if (interest.status !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: "Interest already processed",
-      });
+    // 🔐 only correct donor can accept
+    if (interest.donorId !== donorId) {
+      return res.status(403).json({ message: "Unauthorized" });
     }
 
-    // Mark interest accepted
-    await interestRef.update({
-      status: "accepted",
-      acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    // prevent duplicate chats
+    if (interest.chatId) {
+      return res.json({ chatId: interest.chatId });
+    }
 
-    // Create chat
-    const chatRef = await db.collection("chats").add({
-      donationId: interest.donationId,
+    const chatId = uuidv4();
+
+    // store chat metadata
+    await db.collection("chats").doc(chatId).set({
+      chatId,
       donorId: interest.donorId,
       recipientId: interest.recipientId,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      donationId: interest.donationId,
+      createdAt: new Date(),
     });
 
-    return res.json({
-      success: true,
-      chatId: chatRef.id,
+    await interestRef.update({
+      status: "accepted",
+      chatId,
     });
+
+    res.json({ success: true, chatId });
   } catch (err) {
-    console.error("❌ acceptInterest error:", err);
-    return res.status(500).json({ success: false });
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-/* ================= PREVIEW BEFORE CHAT ================= */
-export const getInterestPreview = async (req, res) => {
+/**
+ * Logged-in donor views their interests
+ */
+export const getInterestsForDonor = async (req, res) => {
   try {
-    const { interestId } = req.params;
+    const donorId = req.auth.payload.sub;
 
-    const interestSnap = await db
+    const snap = await db
+  .collection("interests")
+  .where("donorId", "==", donorId)
+  .get();
+    res.json({
+      data: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * Logged-in recipient views their interests
+ */
+export const getInterestsForRecipient = async (req, res) => {
+  try {
+    const recipientId = req.auth.payload.sub;
+
+    const snap = await db
       .collection("interests")
-      .doc(interestId)
+      .where("recipientId", "==", recipientId)
       .get();
 
-    if (!interestSnap.exists) {
-      return res.status(404).json({ success: false });
-    }
-
-    const interest = interestSnap.data();
-
-    const [donationSnap, donorSnap, recipientSnap] = await Promise.all([
-      db.collection("donations").doc(interest.donationId).get(),
-      db.collection("users").doc(interest.donorId).get(),
-      db.collection("users").doc(interest.recipientId).get(),
-    ]);
-
-    return res.json({
-      success: true,
-      data: {
-        donation: donationSnap.exists ? donationSnap.data() : null,
-        donor: donorSnap.exists ? donorSnap.data() : null,
-        recipient: recipientSnap.exists ? recipientSnap.data() : null,
-      },
+    res.json({
+      data: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
     });
   } catch (err) {
-    console.error("❌ getInterestPreview error:", err);
-    return res.status(500).json({ success: false });
+    res.status(500).json({ message: "Server error" });
   }
 };
-

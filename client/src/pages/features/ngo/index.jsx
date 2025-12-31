@@ -5,7 +5,9 @@ import { Navigation, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import GoogleMapComponent from "../../../components/google-map"
-import NgoPortal from "./NgoPortal"
+
+import NgoRoutes from "./routes";
+
 import { NGO_FEATURE } from "./config"
 
 export default function NGOPage() {
@@ -76,13 +78,14 @@ export default function NGOPage() {
         {/* LEFT PANEL — NGO PORTAL */}
         <div className="w-[420px] overflow-y-auto border-r border-zinc-800 bg-zinc-900">
           <div className="p-6">
-            <NgoPortal
-              userLocation={userLocation}
-              isLoadingLocation={isLoadingLocation}
-              onRequestLocation={requestLocation}
-              onLocationUpdate={setUserLocation}
-              onMapVisibilityChange={setShowMap}
-            />
+           <NgoRoutes
+  userLocation={userLocation}
+  isLoadingLocation={isLoadingLocation}
+  onRequestLocation={requestLocation}
+  onLocationUpdate={setUserLocation}
+  onMapVisibilityChange={setShowMap}
+/>
+
           </div>
         </div>
 

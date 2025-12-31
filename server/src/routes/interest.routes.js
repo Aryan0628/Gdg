@@ -1,28 +1,18 @@
 import express from "express";
+import { checkJwt } from "../auth/authMiddleware.js";
 import {
   createInterest,
-  getInterestsForDonor,
   acceptInterest,
-  getInterestPreview,
+  getInterestsForDonor,
+  getInterestsForRecipient,
 } from "../controllers/interest.controller.js";
 
 const router = express.Router();
 
-/* ================= Recipient ================= */
-// Recipient → "I'm Interested"
-router.post("/", createInterest);
-
-/* ================= Donor ================= */
-// Donor → view pending interests
-router.get("/donor/:donorId", getInterestsForDonor);
-
-/* ================= Shared ================= */
-// Preview before chat
-router.get("/:interestId/preview", getInterestPreview);
-
-// Donor → accept interest
-router.post("/:interestId/accept", acceptInterest);
+router.post("/", checkJwt, createInterest);
+router.post("/:interestId/accept", checkJwt, acceptInterest);
+router.get("/donor", checkJwt, getInterestsForDonor);
+router.get("/recipient", checkJwt, getInterestsForRecipient);
 
 export default router;
-
 

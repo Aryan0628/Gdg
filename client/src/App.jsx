@@ -11,6 +11,16 @@ import Mission from "./pages/Mission";
 import AboutUs from "./pages/AboutUs";
 import Navbar from "./components/Navbar";
 
+
+
+
+
+
+
+
+
+
+
 function App() {
   const location = useLocation();
 
@@ -57,14 +67,18 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/ngo"
-        element={
-          <ProtectedRoute>
-            <NGO />
-          </ProtectedRoute>
-        }
-      />
+<Route
+  path="/ngo/*"
+  element={
+    <ProtectedRoute>
+      <NGO />
+    </ProtectedRoute>
+  }
+/>
+
+
+
+
       <Route
         path="/jobs"
         element={
