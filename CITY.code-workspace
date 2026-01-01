@@ -1,7 +1,19 @@
 {
-    "folders": [
-        {
-            "path": "."
-        }
-    ]
+  "folders": [
+    {
+      "name": "ai_engine",
+      "path": "ai_engine"
+    },
+    {
+      "name": "client",
+      "path": "client"
+    },
+    {
+      "name": "server",
+      "path": "server"
+    }
+  ],
+  "settings": {
+    "python.terminal.activateEnvironment": true
+  }
 }

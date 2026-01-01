@@ -3,6 +3,7 @@ node_modules/
 client/node_modules/
 server/node_modules/
 ai_engine/venv
+server/venv
 ai_engine/__pycache__
 ai_engine/brain/__pycache__
 ai_engine/brain/__init__.py
