@@ -45,6 +45,7 @@ export default function NgoPortal({
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [locationMethod, setLocationMethod] = useState(null);
   const [donations, setDonations] = useState([]);
+  const [interestedDonationIds, setInterestedDonationIds] = useState(new Set());
 
   const navigate = useNavigate();
 
@@ -100,6 +101,27 @@ export default function NgoPortal({
 
     fetchDonations();
   }, [userType, selectedCategory]);
+  /* ================= FETCH MY INTERESTS (DEDUP) ================= */
+useEffect(() => {
+  if (userType !== "recipient") return;
+
+  const fetchMyInterests = async () => {
+    try {
+      const token = await getAccessTokenSilently();
+      const res = await axios.get("/api/interests/mine", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const ids = new Set(res.data.map((i) => i.donationId));
+      setInterestedDonationIds(ids);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  fetchMyInterests();
+}, [userType]);
+
 
   /* ================= MAP CONTROL ================= */
 
@@ -142,26 +164,32 @@ export default function NgoPortal({
 
   /* ================= INTEREST (RECIPIENT) ================= */
 
-  const handleInterest = async (donation) => {
-    try {
-      const token = await getAccessTokenSilently();
+ const handleInterest = async (donation) => {
+  if (interestedDonationIds.has(donation.id)) return;
 
-      await axios.post(
-        "/api/interests",
-        { donationId: donation.id },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+  try {
+    const token = await getAccessTokenSilently();
 
-      alert("Interest sent. Waiting for donor approval.");
-    } catch (err) {
-      console.error(err.response?.data || err);
-      alert("Failed to send interest");
-    }
-  };
+    await axios.post(
+      "/api/interests",
+      { donationId: donation.id },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    // ✅ update local state so button disables instantly
+    setInterestedDonationIds((prev) => new Set([...prev, donation.id]));
+
+    alert("Interest sent. Waiting for donor approval.");
+  } catch (err) {
+    console.error(err.response?.data || err);
+    alert("Failed to send interest");
+  }
+};
+
 
   /* ================= SUBMIT DONATION (DONOR) ================= */
 
@@ -323,6 +351,16 @@ export default function NgoPortal({
             </Button>
             <CardTitle>Available Donations</CardTitle>
           </CardHeader>
+           <Button
+        className="w-full"
+        variant="outline"
+        onClick={() => navigate("/ngo/chats", {
+  state: { category: selectedCategory }
+})
+}
+      >
+        💬 My Chats
+      </Button>
 
           <CardContent className="space-y-3">
   
@@ -342,21 +380,17 @@ export default function NgoPortal({
                     <MapPin className="mr-2" /> Show on Map
                   </Button>
 
-                <Button
+   <Button
   size="sm"
   variant="outline"
+  disabled={interestedDonationIds.has(d.id)}
   onClick={() => handleInterest(d)}
 >
-  I'm Interested
+  {interestedDonationIds.has(d.id) ? "Requested" : "I'm Interested"}
 </Button>
 
-<Button
-  size="sm"
-  variant="secondary"
-  onClick={() => navigate("/ngo/chats")}
->
-  💬 My Chats
-</Button>
+
+
 
                 </CardContent>
               </Card>

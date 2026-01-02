@@ -1,64 +1,67 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { ref, push, onValue } from "firebase/database";
 import { db } from "../../../firebase/firebase";
 import { Button } from "../../../ui/button";
 import { Input } from "../../../ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/card";
+import axios from "axios";
 import { useAuth0 } from "@auth0/auth0-react";
 
 export default function Chat() {
   const { chatId } = useParams();
-  const { user, isLoading, isAuthenticated } = useAuth0();
-
+  const navigate = useNavigate();
+  const { user, getAccessTokenSilently } = useAuth0();
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
 
-  // 🔐 WAIT FOR AUTH
-  if (isLoading) return <p>Loading chat...</p>;
-  if (!isAuthenticated || !user || !chatId)
-    return <p>Invalid chat access</p>;
+  const currentUserId = user?.sub;
 
-  // ✅ PRODUCTION USER ID
-  const currentUserId = user.sub;
+  useEffect(() => {
+    if (!chatId || !user) return;
 
- // 🔁 REALTIME LISTENER (CORRECT)
-useEffect(() => {
-  if (!chatId) return;
+    const verify = async () => {
+      try {
+        const token = await getAccessTokenSilently();
+        await axios.get(`/api/chats/${chatId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch {
+        navigate("/ngo");
+      }
+    };
+    verify();
+  }, [chatId, user]);
 
-  const messagesRef = ref(db, `ngo/chats/${chatId}/messages`);
+  useEffect(() => {
+    if (!chatId) return;
 
-  onValue(messagesRef, (snapshot) => {
-    const data = snapshot.val();
+    const messagesRef = ref(db, `ngo/chats/${chatId}/messages`);
 
-    if (!data) {
-      setMessages([]);
-      return;
-    }
+    onValue(messagesRef, snapshot => {
+      const data = snapshot.val();
+      if (!data) return setMessages([]);
 
-    const list = Object.entries(data).map(([id, msg]) => ({
-      id,
-      ...msg,
-    }));
+      const list = Object.entries(data).map(([id, msg]) => ({
+        id,
+        ...msg,
+      }));
+      list.sort((a, b) => a.createdAt - b.createdAt);
+      setMessages(list);
+    });
+  }, [chatId]);
 
-    list.sort((a, b) => a.createdAt - b.createdAt);
-    setMessages(list);
-  });
-}, [chatId]);
+  const sendMessage = async () => {
+    if (!text.trim() || !currentUserId) return;
 
-// ✉ SEND MESSAGE (CORRECT)
-const sendMessage = async () => {
-  if (!text.trim() || !currentUserId) return;
+    await push(ref(db, `ngo/chats/${chatId}/messages`), {
+      text,
+      senderId: currentUserId,
+      createdAt: Date.now(),
+    });
 
-  await push(ref(db, `ngo/chats/${chatId}/messages`), {
-    text,
-    senderId: currentUserId,
-    createdAt: Date.now(),
-  });
-
-  setText("");
-};
-
+    setText("");
+  };
 
   return (
     <Card>
@@ -68,7 +71,7 @@ const sendMessage = async () => {
 
       <CardContent>
         <div className="h-64 overflow-y-auto mb-3 space-y-2">
-          {messages.map((m) => (
+          {messages.map(m => (
             <div
               key={m.id}
               className={`p-2 rounded max-w-[70%] ${
@@ -85,9 +88,8 @@ const sendMessage = async () => {
         <div className="flex gap-2">
           <Input
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={e => setText(e.target.value)}
             placeholder="Type a message"
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
           />
           <Button onClick={sendMessage}>Send</Button>
         </div>

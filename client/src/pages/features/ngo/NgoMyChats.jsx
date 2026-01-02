@@ -1,67 +1,70 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
-import { useAuth0 } from "@auth0/auth0-react";
-
+import { useNavigate, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/card";
 import { Button } from "../../../ui/button";
+import { useAuth0 } from "@auth0/auth0-react";
 
 export default function NgoMyChats() {
-  const [interests, setInterests] = useState([]);
-  const navigate = useNavigate();
   const { getAccessTokenSilently } = useAuth0();
+  const [chats, setChats] = useState([]);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // 👇 category passed while navigating
+  const selectedCategory = location.state?.category;
 
   useEffect(() => {
     const fetchChats = async () => {
-      try {
-        const token = await getAccessTokenSilently();
+      const token = await getAccessTokenSilently();
 
-        const res = await axios.get("/api/interests/recipient", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+      const res = await axios.get("/api/chats/recipient", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        setInterests(res.data.data || []);
-      } catch (err) {
-        console.error("Failed to fetch chats", err);
+      let allChats = res.data.data || [];
+
+      // ✅ FILTER BY CATEGORY
+      if (selectedCategory) {
+        allChats = allChats.filter(
+          (chat) => chat.donationCategory === selectedCategory
+        );
       }
+
+      setChats(allChats);
     };
 
     fetchChats();
-  }, []);
+  }, [selectedCategory]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>My Requests</CardTitle>
+        <CardTitle>
+          My Chats {selectedCategory && `(${selectedCategory})`}
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {interests.length === 0 && (
-          <p className="text-sm text-gray-500">No requests yet</p>
+        {chats.length === 0 && (
+          <p className="text-sm text-gray-500">No chats found</p>
         )}
 
-        {interests.map((i) => (
-          <Card key={i.id}>
+        {chats.map((chat) => (
+          <Card key={chat.id}>
             <CardContent className="flex justify-between items-center">
               <div>
-                <p className="font-semibold">Donation: {i.donationId}</p>
-                <p className="text-sm">Status: {i.status}</p>
+                <p className="font-semibold">{chat.donationTitle}</p>
+                <p className="text-sm text-gray-500">
+                  Category: {chat.donationCategory}
+                </p>
               </div>
 
-              {i.status === "accepted" && i.chatId && (
-                <Button
-                  onClick={() =>
-                   navigate(`/ngo/chat/${i.chatId}`, {
-  state: { role: "recipient" },
-})
-
-                  }
-                >
-                  Open Chat
-                </Button>
-              )}
+              <Button
+                onClick={() => navigate(`/ngo/chat/${chat.id}`)}
+              >
+                Open Chat
+              </Button>
             </CardContent>
           </Card>
         ))}
