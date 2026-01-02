@@ -3,17 +3,16 @@ import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import fs from "fs";
 
-// --- Calculate __dirname equivalent in ESM ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
  * Executes the Python GEE fire detection script.
- * @param {Object} regionGeoJson - GeoJSON object for the region to analyze
- * @param {string} regionId - Identifier for the region
- * @param {string} credentialsPath - Path to GCP credentials file
- * @param {number} [daysBack] - Optional: how many days back should the fire detection look
- * @returns {Promise<Object>} - Analysis results
+ * @param {Object} regionGeoJson 
+ * @param {string} regionId 
+ * @param {string} credentialsPath
+ * @param {number} [daysBack] 
+ * @returns {Promise<Object>}
  */
 function runFireProtectionCheck(
   regionGeoJson,
@@ -22,11 +21,10 @@ function runFireProtectionCheck(
   daysBack
 ) {
   return new Promise((resolve, reject) => {
-    // --- CHANGE 1: Use 'python3' to ensure compatibility with GEE libraries ---
+    
     const pythonExecutable = "python3"; 
     
-    // --- CHANGE 2: Update filename to match the new VIIRS script ---
-    // Make sure this matches exactly what you saved the Python file as
+  
     const scriptFilename = "viirs_fire_monitor.py"; 
     
     const scriptPath = path.resolve(__dirname, scriptFilename);
@@ -39,7 +37,7 @@ function runFireProtectionCheck(
 
     console.log(`Executing Python script: ${scriptPath}`);
     console.log(`For region: ${regionId}`);
-    // console.log(`Passing credentials path: ${credentialsPath}`); // Security: Don't log full path in prod
+    console.log(`Passing credentials path: ${credentialsPath}`);
 
     const pythonProcess = spawn(pythonExecutable, [
       scriptPath,
@@ -66,8 +64,8 @@ function runFireProtectionCheck(
 
     pythonProcess.stderr.on("data", (data) => {
       scriptError += data.toString();
-      // Only log stderr if needed for debugging to keep logs clean
-      // console.error(`Python stderr: ${data}`); 
+     
+        console.error(`Python stderr: ${data}`); 
     });
 
     pythonProcess.on("close", (code) => {
@@ -83,7 +81,7 @@ function runFireProtectionCheck(
 
           const result = JSON.parse(trimmedOutput);
           
-          // Check if Python script sent a logical error despite exit code 0
+         
           if (result.status === "error") {
              return reject(new Error(`GEE Script Error: ${result.message}`));
           }
@@ -92,7 +90,7 @@ function runFireProtectionCheck(
           resolve(result);
         } catch (parseError) {
           console.error("Failed to parse Python JSON output:", parseError);
-          // Helpful for debugging: Print what actually came back (might be an error stack trace)
+          
           console.error("Raw Python output:", scriptOutput); 
           reject(
             new Error(`Failed to parse JSON output: ${parseError.message}`)
@@ -100,7 +98,7 @@ function runFireProtectionCheck(
         }
       } else {
         console.error(`Python script failed with exit code ${code}`);
-        // Return the stderr so you know WHY it failed (e.g., GEE auth error)
+       
         reject(
           new Error(
             `Python script failed with code ${code}. Error output: ${scriptError}`
@@ -115,7 +113,7 @@ function runFireProtectionCheck(
     });
 
     try {
-      // console.log("Writing input data to Python stdin:", inputJsonString);
+      console.log("Writing input data to Python stdin:", inputJsonString);
       pythonProcess.stdin.write(inputJsonString);
       pythonProcess.stdin.end();
     } catch (stdinError) {

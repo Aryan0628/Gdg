@@ -6,7 +6,7 @@ import datetime
 import time
 import traceback
 DEFAULT_DAYS_BACK = 5
-FIRE_COLLECTION = 'FIRMS'  # Includes VIIRS (375m)
+FIRE_COLLECTION = 'FIRMS'  #Includes VIIRS (375m)
 LANDCOVER_COLLECTION = 'ESA/WorldCover/v100/2020'
 gcp_project_id = 'certain-acre-482416-b7'
 
@@ -45,13 +45,12 @@ def detect_active_fires(region_geometry, days_back):
         end_date = ee.Date(now)
         start_date = end_date.advance(-days_back, 'day')
 
-        # --- STEP 1: LOAD RAW VIIRS DATA ---
-        # We need both T21 (Temperature) and confidence
+       
         dataset = ee.ImageCollection(FIRE_COLLECTION) \
             .filterDate(start_date, end_date) \
             .filterBounds(region_geometry)
 
-        # Helper to map confidence strings 'l', 'n', 'h' to numbers 1, 2, 3
+       
         # l=Low, n=Nominal, h=High
         def map_confidence(img):
             conf_numeric = img.select('confidence').remap(['l', 'n', 'h'], [1, 2, 3], 0).rename('conf_score')
@@ -59,38 +58,33 @@ def detect_active_fires(region_geometry, days_back):
 
         dataset_mapped = dataset.map(map_confidence)
 
-        # Create Mosaics (Flatten time series to single image)
+        # Create Mosaics 
         temp_max = dataset_mapped.select('T21').max().clip(region_geometry)
         conf_max = dataset_mapped.select('conf_score').max().clip(region_geometry)
 
-        # --- STEP 2: INDUSTRIAL MASKING (Anti-Factory) ---
-        # ESA WorldCover 10m: Class 50 = Built-up
+        #industries masking 
         wc = ee.Image(LANDCOVER_COLLECTION).select('Map')
         industrial_mask = wc.neq(50) # Keep everything except factories/cities
 
-        # --- STEP 3: "INDIAN SUMMER" FILTERING ---
-        # Rule 1: High Confidence (3) -> Always Keep
-        # Rule 2: Nominal Confidence (2) -> Only Keep if Temp > 330K (57°C)
-        # This prevents "Warm Soil" false alarms in May/June
+       #filtering for indian summers
         
         valid_fire_mask = conf_max.eq(3).Or(
             conf_max.eq(2).And(temp_max.gt(330.0))
         )
 
-        # Combine logic: (Is Fire) AND (Not Factory)
+    
         final_mask = valid_fire_mask.And(industrial_mask)
         
-        # Apply mask to the temperature data
+        
         fire_clean = temp_max.updateMask(final_mask)
 
-        # --- STEP 4: COUNTING ---
-        # Convert to boolean for counting
+        # converting to boolean for counting
         hot_pixels = fire_clean.gt(0).selfMask()
         
         stats = hot_pixels.reduceRegion(
             reducer=ee.Reducer.count(),
             geometry=region_geometry,
-            scale=375, # VIIRS Resolution
+            scale=375,
             maxPixels=1e9
         )
         pixel_count = stats.get('T21').getInfo()
@@ -98,22 +92,21 @@ def detect_active_fires(region_geometry, days_back):
         
         print(f"Detected {pixel_count} verified VIIRS pixels.", file=sys.stderr)
 
-        # --- STEP 5: VISUALIZATION & OUTPUT ---
+
         vis_params = {
             "min": 325, # Kelvin (~52C) - Start showing red here
             "max": 400, # Kelvin (~127C) - Peak yellow/white
             "palette": ['ff0000', 'ffa500', 'ffff00'] 
         }
 
-        # Generate "After" URL (Current Active Fires)
-        # Visualizing the cleaned data over transparent background
+       #after url
         after_image_url = get_fire_image_url(fire_clean, region_geometry, vis_params, "after")
 
-        # Generate "Before" URL (Historical Baseline - 1 Year Ago)
+       #before url
         hist_start = start_date.advance(-1, 'year')
         hist_end = end_date.advance(-1, 'year')
         
-        # Reuse same logic for historical to make fair comparison
+        
         hist_ds = ee.ImageCollection(FIRE_COLLECTION).filterDate(hist_start, hist_end).filterBounds(region_geometry).map(map_confidence)
         hist_temp = hist_ds.select('T21').max().clip(region_geometry)
         hist_conf = hist_ds.select('conf_score').max().clip(region_geometry)
@@ -122,17 +115,17 @@ def detect_active_fires(region_geometry, days_back):
         
         before_image_url = get_fire_image_url(hist_clean, region_geometry, vis_params, "before")
 
-        # --- STEP 6: EXTRACT POINTS LIST ---
+       #fire point rist
         fires_list = []
         if pixel_count > 0:
-            # Convert Raster pixels to Vector Points
+           
             vectors = fire_clean.addBands(ee.Image.pixelLonLat()).reduceToVectors(
                 geometry=region_geometry,
                 scale=375,
                 maxPixels=1e8,
                 reducer=ee.Reducer.mean(), 
                 bestEffort=True,
-                numPixels=50 # Cap at 50 points for dashboard performance
+                numPixels=50 
             )
             
             features = vectors.getInfo()['features']
@@ -147,8 +140,8 @@ def detect_active_fires(region_geometry, days_back):
 
                 fires_list.append({
                     "acq_date": "N/A (Mosaic)",
-                    "brightness": round(temp_k, 2), # Kelvin
-                    "temp_c": round(temp_k - 273.15, 1), # Celsius for UI
+                    "brightness": round(temp_k, 2), 
+                    "temp_c": round(temp_k - 273.15, 1),
                     "intensity": intensity,
                     "confidence": "High (VIIRS Verified)",
                     "latitude": feat['geometry']['coordinates'][0][0][1],
@@ -193,7 +186,7 @@ if __name__ == "__main__":
         print(json.dumps({"status": "error", "message": "GEE Init Failed"}))
         sys.exit(1)
 
-    # GeoJSON parsing
+    
     try:
         g_type = geojson.get('type')
         coords = geojson.get('coordinates')
