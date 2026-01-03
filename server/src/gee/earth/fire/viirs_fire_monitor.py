@@ -114,7 +114,6 @@ def detect_active_fires(region_geometry, days_back):
             }
             before_image_url = get_fire_image_url(hist_lst, region_geometry, vis_params_hist, "before")   
         else:
-            # SCENARIO B: Safe (Show Thermal Map)
             safe_start_date = end_date.advance(-30, 'day')
             lst_dataset = ee.ImageCollection(LST_COLLECTION) \
                 .filterDate(safe_start_date, end_date) \
@@ -136,8 +135,8 @@ def detect_active_fires(region_geometry, days_back):
                 .multiply(0.02)
             
             vis_params = {
-                "min": 290, 
-                "max": 330, 
+                "min": 273,  # Change to 273 Kelvin (0°C)
+                "max": 310,  # Lower max to 310 Kelvin (37°C) to make contrast visible
                 "palette": ['0000ff', '00ffff', '00ff00', 'ffff00', 'ff0000'] 
             }
             
