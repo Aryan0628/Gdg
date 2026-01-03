@@ -1,3 +1,4 @@
+import "dotenv/config";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
@@ -14,7 +15,7 @@ const __dirname = path.dirname(__filename);
  * @param {number} [daysBack] 
  * @returns {Promise<Object>}
  */
-function runFireProtectionCheck(
+export function runFireProtectionCheck(
   regionGeoJson,
   regionId,
   credentialsPath,
@@ -22,11 +23,8 @@ function runFireProtectionCheck(
 ) {
   return new Promise((resolve, reject) => {
     
-    const pythonExecutable = "python3"; 
-    
-  
+    const pythonExecutable = path.join(process.cwd(), "venv", "bin", "python3"); 
     const scriptFilename = "viirs_fire_monitor.py"; 
-    
     const scriptPath = path.resolve(__dirname, scriptFilename);
 
     if (!fs.existsSync(scriptPath)) {
@@ -36,9 +34,7 @@ function runFireProtectionCheck(
     }
 
     console.log(`Executing Python script: ${scriptPath}`);
-    console.log(`For region: ${regionId}`);
-    console.log(`Passing credentials path: ${credentialsPath}`);
-
+    
     const pythonProcess = spawn(pythonExecutable, [
       scriptPath,
       credentialsPath,
@@ -56,21 +52,17 @@ function runFireProtectionCheck(
     const inputJsonString = JSON.stringify(inputData);
 
     let scriptOutput = "";
-    let scriptError = "";
+    
+    pythonProcess.stderr.on("data", (data) => {
+      const message = data.toString();
+      console.error(`[Python Log]: ${message.trim()}`); 
+    });
 
     pythonProcess.stdout.on("data", (data) => {
       scriptOutput += data.toString();
     });
 
-    pythonProcess.stderr.on("data", (data) => {
-      scriptError += data.toString();
-     
-        console.error(`Python stderr: ${data}`); 
-    });
-
     pythonProcess.on("close", (code) => {
-      console.log(`Python script exited with code ${code}`);
-      
       if (code === 0) {
         try {
           const trimmedOutput = scriptOutput.trim();
@@ -81,7 +73,6 @@ function runFireProtectionCheck(
 
           const result = JSON.parse(trimmedOutput);
           
-         
           if (result.status === "error") {
              return reject(new Error(`GEE Script Error: ${result.message}`));
           }
@@ -90,20 +81,12 @@ function runFireProtectionCheck(
           resolve(result);
         } catch (parseError) {
           console.error("Failed to parse Python JSON output:", parseError);
-          
           console.error("Raw Python output:", scriptOutput); 
-          reject(
-            new Error(`Failed to parse JSON output: ${parseError.message}`)
-          );
+          reject(new Error(`Failed to parse JSON output: ${parseError.message}`));
         }
       } else {
         console.error(`Python script failed with exit code ${code}`);
-       
-        reject(
-          new Error(
-            `Python script failed with code ${code}. Error output: ${scriptError}`
-          )
-        );
+        reject(new Error(`Python script failed.`));
       }
     });
 
@@ -113,7 +96,7 @@ function runFireProtectionCheck(
     });
 
     try {
-      console.log("Writing input data to Python stdin:", inputJsonString);
+      console.log("Writing input data to Python stdin...");
       pythonProcess.stdin.write(inputJsonString);
       pythonProcess.stdin.end();
     } catch (stdinError) {
@@ -123,4 +106,49 @@ function runFireProtectionCheck(
   });
 }
 
-export { runFireProtectionCheck };
+//test block , australia ka hai 
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  (async () => {
+    const testGeoJson = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [133.0, -23.0], 
+          [134.0, -23.0],
+          [134.0, -22.0],
+          [133.0, -22.0],
+          [133.0, -23.0],
+        ],
+      ],
+    };
+    const testRegionId = "test-fire-zone-australia";
+    
+    //checking credentials
+    const rawCredentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (!rawCredentialsPath) {
+        console.error("❌ Error: GOOGLE_APPLICATION_CREDENTIALS env var is missing.");
+        process.exit(1);
+    }
+    
+    let credentialsPath = rawCredentialsPath.replace(/^["']|["']$/g, "").trim();
+
+    console.log("🔥 Starting Fire Monitor Test...");
+    
+    try {
+      const result = await runFireProtectionCheck(
+        testGeoJson,
+        testRegionId,
+        credentialsPath,
+        30
+        
+      );
+
+      console.log("\n✅ Test Result:");
+      console.log(JSON.stringify(result, null, 2));
+
+    } catch (error) {
+      console.error("\n❌ Test Failed:");
+      console.error(error.message);
+    }
+  })();
+}
