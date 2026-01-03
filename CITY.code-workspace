@@ -11,6 +11,9 @@
     {
       "name": "server",
       "path": "server"
+    },
+    {
+      "path": "."
     }
   ],
   "settings": {
