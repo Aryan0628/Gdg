@@ -1,3 +1,5 @@
+# backend/services/google-earth/copernicus_deforestation.py
+
 import sys
 import json
 import os
@@ -10,7 +12,8 @@ from pathlib import Path
 gcp_project_id = 'certain-acre-482416-b7' 
 
 # We check the last 6 days to catch the latest single satellite pass.
-RECENT_PERIOD_DAYS = 6 
+RECENT_PERIOD_DAYS = 6
+
 
 # We compare "Now" vs "Stable Baseline" (Last 3 months).
 PREVIOUS_PERIOD_DAYS = 90 
@@ -83,7 +86,7 @@ def check_deforestation(region_geometry, threshold, buffer_radius_meters):
             .map(mask_s2_clouds) \
             .map(calculate_ndvi)
 
-        #checking if we have any data of the last three days
+        # checking if we have any data of the last 6 days
         count = recent_collection.size().getInfo()
         if count == 0:
             return {
@@ -107,8 +110,8 @@ def check_deforestation(region_geometry, threshold, buffer_radius_meters):
             .median() \
             .clip(region_geometry)
 
-        #calculating sudden drop
-       #latest image -stable baseline
+        # calculating sudden drop
+        # latest image - stable baseline
         ndvi_diff = recent_ndvi.subtract(baseline_ndvi)
         
         stats = ndvi_diff.reduceRegion(
@@ -129,12 +132,27 @@ def check_deforestation(region_geometry, threshold, buffer_radius_meters):
         # Trigger Alert
         alert_triggered = mean_change < threshold
 
-    
-        vis_params = {'min': 0, 'max': 0.8, 'palette': ['#d7191c', '#ffffbf', '#1a9641']}
+        # --- VISUALIZATION SETUP ---
+        vis_params_ndvi = {'min': 0, 'max': 0.8, 'palette': ['#d7191c', '#ffffbf', '#1a9641']}
         
-        # For the "After" image, we want to see the specific recent pass
-        end_url = get_image_thumbnail_url(recent_ndvi, region_geometry, vis_params, "after")
-        start_url = get_image_thumbnail_url(baseline_ndvi, region_geometry, vis_params, "before")
+        # 1. Before (Baseline)
+        start_url = get_image_thumbnail_url(baseline_ndvi, region_geometry, vis_params_ndvi, "before")
+        
+        # 2. After (Recent)
+        end_url = get_image_thumbnail_url(recent_ndvi, region_geometry, vis_params_ndvi, "after")
+
+        # --- NEW: 3. Change Mask (Red Alert Layer) ---
+        # Logic: Find pixels where the drop is worse than the threshold (e.g. drop < -0.15)
+        # .selfMask() makes everything else transparent.
+        loss_mask = ndvi_diff.lt(threshold).selfMask()
+        
+        vis_params_loss = {
+            'min': 0, 
+            'max': 1, 
+            'palette': ['FF0000'] # Pure Bright Red
+        }
+        
+        change_url = get_image_thumbnail_url(loss_mask, region_geometry, vis_params_loss, "change_mask")
 
         return {
             "status": "success",
@@ -143,6 +161,7 @@ def check_deforestation(region_geometry, threshold, buffer_radius_meters):
             "threshold": threshold,
             "start_image_url": start_url,
             "end_image_url": end_url,
+            "change_image_url": change_url, # <--- The new 3rd URL
             "dates": {
                 "scan_window_start": start_date_recent.format('YYYY-MM-dd').getInfo(),
                 "scan_window_end": end_date_recent.format('YYYY-MM-dd').getInfo()
