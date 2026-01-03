@@ -67,10 +67,12 @@ export async function generatefireReport(req, res) {
             });
         }
 
-        // --- FIREBASE LOGIC ---
+        //firebase me add krneke liye , yayyyyy, backend complete project ka 4/01/26 1:22AM
+        const userId=req.auth.isAbsolute
+        console.log(userId)
         if (fire_analysis_result.status === 'success') {
             try {
-                await db.collection('fire_reports').add({
+                await db.collection('fire_reports').doc(userId).add({
                     regionId: regionId,
                     timestamp: new Date(), 
                     ...fire_analysis_result

@@ -73,19 +73,15 @@ export async function generatePollutantsReport(req, res) {
             });
         }
 
-        // 4. FIREBASE LOGIC: Save "Good Data" to Firestore
-        // We only save if the status is success to keep the DB clean
+        
+        const userId=req.auth.sub;
+        console.log("userid",userId);
         if (pollutant_analysis_result.status === 'success') {
             try {
-                // Create a new document in a 'fire_reports' collection
-                // We use .set() with merge: true or .add(). 
-                // Here we use .doc(regionId) if you want one report per region, 
-                // OR .add() if you want a history of reports. 
-                
-                // OPTION A: History (Recommended - keeps a log of all checks)
-                await db.collection('pollutant_reports').add({
+
+                await db.collection('pollutant_reports').doc(userId).add({
                     regionId: regionId,
-                    timestamp: new Date(), // Server timestamp
+                    timestamp: new Date(), 
                     ...pollutant_analysis_result
                 });
 
@@ -93,7 +89,7 @@ export async function generatePollutantsReport(req, res) {
 
             } catch (dbError) {
                 console.error("Firebase Save Error:", dbError);
-                // We don't fail the request if DB save fails, just log it
+               
             }
         }
 

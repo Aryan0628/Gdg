@@ -1,7 +1,7 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { runCoastalCheck } from "../gee/earth/coastal_erosion/landsat_coastal.js";
+import { runCoastalCheck } from "../gee/earth/coastal_erosion/landsat_coastal.js"; 
 import dotenv from "dotenv";
 import { db } from "../firebaseadmin/firebaseadmin.js"; 
 
@@ -17,7 +17,6 @@ export async function generateCoastalReport(req, res) {
             regionId,
         } = req.body;
 
-        
         if (!regionGeoJson || !regionId) {
             return res.status(400).json({ 
                 success: false, 
@@ -25,6 +24,7 @@ export async function generateCoastalReport(req, res) {
             });
         }
 
+    
         let credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
         
         if (credentialsPath && credentialsPath.startsWith('"') && credentialsPath.endsWith('"')) {
@@ -45,14 +45,11 @@ export async function generateCoastalReport(req, res) {
 
         let coastal_analysis_result = null;
         try {
-            
             coastal_analysis_result = await runCoastalCheck(
                 regionGeoJson, 
                 regionId, 
-                credentialsPath, 
-                thresholdPercent,
+                credentialsPath
             );
-
             
             if (!coastal_analysis_result) {
                 throw new Error("Analysis script returned no data");
@@ -70,14 +67,14 @@ export async function generateCoastalReport(req, res) {
             });
         }
 
-       
+  
+        const userId=req.auth.sub;
+        console.log("userid",userId);
         if (coastal_analysis_result.status === 'success') {
             try { 
-                
-                
-                await db.collection('coastal_reports').add({
+                await db.collection('coastal_reports').doc(userId).add({
                     regionId: regionId,
-                    timestamp: new Date(), // Server timestamp
+                    timestamp: new Date(),
                     ...coastal_analysis_result
                 });
 
@@ -85,7 +82,6 @@ export async function generateCoastalReport(req, res) {
 
             } catch (dbError) {
                 console.error("Firebase Save Error:", dbError);
-               
             }
         }
 

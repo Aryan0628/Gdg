@@ -3,7 +3,6 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import { runFloodCheck } from "../gee/earth/flood/sentinel1_flood.js";
 import dotenv from "dotenv";
-// Make sure this path matches your project structure
 import { db } from "../firebaseadmin/firebaseadmin.js"; 
 
 dotenv.config();
@@ -69,14 +68,15 @@ export async function generateFloodReport(req, res) {
             });
         }
 
-        // --- FIREBASE LOGIC ---
-        // FIX: Ensure we check and save the correct variable 'flood_analysis_result'
+        
+        const userId=req.auth.sub;
+        console.log("userid",userId);
         if (flood_analysis_result.status === 'success') {
             try {
-                await db.collection('flood_reports').add({
+                await db.collection('flood_reports').doc(userId).add({
                     regionId: regionId,
                     timestamp: new Date(),
-                    ...flood_analysis_result // <--- FIXED: Was 'deforestation_analysis_result'
+                    ...flood_analysis_result 
                 });
 
                 console.log(`Report saved to Firestore for region: ${regionId}`);

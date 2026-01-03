@@ -4,7 +4,6 @@ import fs from "fs";
 import { runHeatCheck } from "../gee/earth/surfaceHeat/landsat_surface_temp.js";
 import dotenv from "dotenv";
 import { db } from "../firebaseadmin/firebaseadmin.js";
-
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,10 +70,11 @@ export async function generateLandHeatReport(req, res) {
             });
         }
 
-       
+       const userId=req.auth.sub;
+       console.log("userid",userId);
         if (landheat_analysis_result === 'success') {
             try {
-                await db.collection('landheat_reports').add({
+                await db.collection('landheat_reports').doc(userId).add({
                     regionId: regionId,
                     timestamp: new Date(), 
                     ...landheat_analysis_result

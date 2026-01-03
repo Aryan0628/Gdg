@@ -68,12 +68,11 @@ export async function generateDeforestationReport(req, res) {
                 }
             });
         }
-
-        // --- FIREBASE LOGIC ---
-        // FIX 2: Updated variable name from 'fire_analysis_result' to 'deforestation_analysis_result'
+        const userId=req.auth.sub;
+        console.log(userId);
         if (deforestation_analysis_result.status === 'success') {
             try {
-                await db.collection('deforestation_reports').add({
+                await db.collection('deforestation_reports').doc(userId).add({
                     regionId: regionId,
                     timestamp: new Date(),
                     ...deforestation_analysis_result
