@@ -5,6 +5,10 @@ import authRoutes from "./src/routes/auth.js";
 import donationRoutes from "./src/routes/donation.routes.js";
 import interestRoutes from "./src/routes/interest.routes.js";
 import chatRoutes from "./src/routes/chat.routes.js";
+import complaintRoutes from "./src/routes/complaint.routes.js";
+import complaintStatsRoutes from "./src/routes/complaintStats.routes.js";
+
+
 
 
 const app = express();
@@ -27,6 +31,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/interests", interestRoutes);
 app.use("/api/chats", chatRoutes);
+app.use("/api/complaints", complaintRoutes);
+app.use("/api/complaint-stats",complaintStatsRoutes);
+
 
 
 

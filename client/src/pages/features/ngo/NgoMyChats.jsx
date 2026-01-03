@@ -4,34 +4,62 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/card";
 import { Button } from "../../../ui/button";
 import { useAuth0 } from "@auth0/auth0-react";
+import ReportComplaintModal from "./ReportComplaintModal";
 
 export default function NgoMyChats() {
   const { getAccessTokenSilently } = useAuth0();
   const [chats, setChats] = useState([]);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [selectedChat, setSelectedChat] = useState(null);
+
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 👇 category passed while navigating
   const selectedCategory = location.state?.category;
+  const viewHistory = async (userId) => {
+  try {
+    const token = await getAccessTokenSilently();
+
+    const res = await axios.get(
+      `/api/complaint-stats/${userId}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    alert(
+      `Total complaints: ${res.data.total}\n` 
+    );
+  } catch (err) {
+    alert(
+      err.response?.data?.message ||
+      "Failed to load complaint history"
+    );
+  }
+};
+
 
   useEffect(() => {
     const fetchChats = async () => {
-      const token = await getAccessTokenSilently();
+      try {
+        const token = await getAccessTokenSilently();
 
-      const res = await axios.get("/api/chats/recipient", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        const res = await axios.get("/api/chats/recipient", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      let allChats = res.data.data || [];
+        let allChats = res.data.data || [];
 
-      // ✅ FILTER BY CATEGORY
-      if (selectedCategory) {
-        allChats = allChats.filter(
-          (chat) => chat.donationCategory === selectedCategory
-        );
+        if (selectedCategory) {
+          allChats = allChats.filter(
+            (chat) => chat.donationCategory === selectedCategory
+          );
+        }
+
+        setChats(allChats);
+      } catch (err) {
+        console.error(err.response?.data || err);
       }
-
-      setChats(allChats);
     };
 
     fetchChats();
@@ -60,15 +88,47 @@ export default function NgoMyChats() {
                 </p>
               </div>
 
-              <Button
-                onClick={() => navigate(`/ngo/chat/${chat.id}`)}
-              >
-                Open Chat
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => navigate(`/ngo/chat/${chat.id}`)}
+                >
+                  Open Chat
+                </Button>
+
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setSelectedChat(chat);
+                    setReportOpen(true);
+                  }}
+                >
+                  Report
+                </Button>
+                <Button
+  variant="outline"
+  onClick={() => viewHistory(chat.donorId)}
+>
+  View Donor History
+</Button>
+
+              </div>
             </CardContent>
           </Card>
         ))}
       </CardContent>
+
+      {/* ✅ MODAL MUST BE INSIDE RETURN */}
+      {selectedChat && (
+        <ReportComplaintModal
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          chatId={selectedChat.id}
+          donationId={selectedChat.donationId}
+          againstUserId={selectedChat.donorId}
+          role="recipient"
+        />
+      )}
     </Card>
   );
 }
+

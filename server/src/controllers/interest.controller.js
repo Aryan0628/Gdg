@@ -1,5 +1,6 @@
 import { db } from "../firebaseadmin/firebaseadmin.js";
 
+
 /* ================= CREATE INTEREST ================= */
 export const createInterest = async (req, res) => {
   try {
