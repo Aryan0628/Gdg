@@ -13,7 +13,6 @@ const __dirname = path.dirname(__filename);
  * @param {string} regionId - Identifier for the region
  * @param {string} credentialsPath - Path to GCP credentials file
  * @param {number} [thresholdPercent] - Optional: Flood alert threshold (default 5.0%)
- * @param {number} [bufferMeters] - Optional: Buffer radius in meters for points (default 1000)
  * @returns {Promise<Object>} - Analysis results
  */
 export function runFloodCheck(
@@ -21,7 +20,6 @@ export function runFloodCheck(
   regionId,
   credentialsPath,
   thresholdPercent,
-  bufferMeters
 ) {
   return new Promise((resolve, reject) => {
     const pythonExecutable = process.platform === "win32" ? "python" : "python3";
@@ -52,9 +50,6 @@ export function runFloodCheck(
       inputData.threshold_percent = parseFloat(thresholdPercent);
     }
 
-    if (bufferMeters !== undefined && bufferMeters !== null && !isNaN(parseInt(bufferMeters))) {
-      inputData.buffer_meters = parseInt(bufferMeters);
-    }
 
     const inputJsonString = JSON.stringify(inputData);
 
