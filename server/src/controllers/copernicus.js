@@ -3,11 +3,12 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import { runDeforestationCheck } from "../gee/earth/deforestation/copernicus_deforestation.js";
 import dotenv from "dotenv";
-import { db } from "../firebase/admin.js"; 
+import { db } from "../firebaseadmin/firebaseadmin.js"; 
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.URL);
+// FIX 1: .url should be lowercase
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function generateDeforestationReport(req, res) {
@@ -18,7 +19,6 @@ export async function generateDeforestationReport(req, res) {
             threshold,
             bufferMeters 
         } = req.body;
-
         
         if (!regionGeoJson || !regionId) {
             return res.status(400).json({ 
@@ -47,7 +47,6 @@ export async function generateDeforestationReport(req, res) {
 
         let deforestation_analysis_result = null;
         try {
-            
             deforestation_analysis_result = await runDeforestationCheck(
                 regionGeoJson, 
                 regionId, 
@@ -56,7 +55,6 @@ export async function generateDeforestationReport(req, res) {
                 bufferMeters
             );
 
-            
             if (!deforestation_analysis_result) {
                 throw new Error("Analysis script returned no data");
             }
@@ -73,19 +71,13 @@ export async function generateDeforestationReport(req, res) {
             });
         }
 
-        // 4. FIREBASE LOGIC: Save "Good Data" to Firestore
-        // We only save if the status is success to keep the DB clean
-        if (fire_analysis_result.status === 'success') {
+        // --- FIREBASE LOGIC ---
+        // FIX 2: Updated variable name from 'fire_analysis_result' to 'deforestation_analysis_result'
+        if (deforestation_analysis_result.status === 'success') {
             try {
-                // Create a new document in a 'fire_reports' collection
-                // We use .set() with merge: true or .add(). 
-                // Here we use .doc(regionId) if you want one report per region, 
-                // OR .add() if you want a history of reports. 
-                
-                // OPTION A: History (Recommended - keeps a log of all checks)
                 await db.collection('deforestation_reports').add({
                     regionId: regionId,
-                    timestamp: new Date(), // Server timestamp
+                    timestamp: new Date(),
                     ...deforestation_analysis_result
                 });
 
@@ -93,7 +85,6 @@ export async function generateDeforestationReport(req, res) {
 
             } catch (dbError) {
                 console.error("Firebase Save Error:", dbError);
-                // We don't fail the request if DB save fails, just log it
             }
         }
 
