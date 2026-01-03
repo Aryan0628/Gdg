@@ -3,11 +3,11 @@ import { fileURLToPath } from "url";
 import fs from "fs";
 import { runCoastalCheck } from "../gee/earth/coastal_erosion/landsat_coastal.js";
 import dotenv from "dotenv";
-import { db } from "../firebase/admin.js"; 
+import { db } from "../firebaseadmin/firebaseadmin.js"; 
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.URL);
+const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function generateCoastalReport(req, res) {
@@ -15,7 +15,6 @@ export async function generateCoastalReport(req, res) {
         const {
             regionGeoJson,
             regionId,
-            bufferMeters 
         } = req.body;
 
         
@@ -52,7 +51,6 @@ export async function generateCoastalReport(req, res) {
                 regionId, 
                 credentialsPath, 
                 thresholdPercent,
-                bufferMeters
             );
 
             
@@ -72,16 +70,11 @@ export async function generateCoastalReport(req, res) {
             });
         }
 
-        // 4. FIREBASE LOGIC: Save "Good Data" to Firestore
-        // We only save if the status is success to keep the DB clean
+       
         if (coastal_analysis_result.status === 'success') {
-            try {
-                // Create a new document in a 'fire_reports' collection
-                // We use .set() with merge: true or .add(). 
-                // Here we use .doc(regionId) if you want one report per region, 
-                // OR .add() if you want a history of reports. 
+            try { 
                 
-                // OPTION A: History (Recommended - keeps a log of all checks)
+                
                 await db.collection('coastal_reports').add({
                     regionId: regionId,
                     timestamp: new Date(), // Server timestamp
@@ -92,7 +85,7 @@ export async function generateCoastalReport(req, res) {
 
             } catch (dbError) {
                 console.error("Firebase Save Error:", dbError);
-                // We don't fail the request if DB save fails, just log it
+               
             }
         }
 
