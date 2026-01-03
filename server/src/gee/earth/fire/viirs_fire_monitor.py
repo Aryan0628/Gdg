@@ -6,25 +6,27 @@ import os
 import ee
 import datetime
 import traceback
+# 1. UPDATED: Modern Authentication Library
+from google.oauth2 import service_account
 
 # --- CONFIGURATION ---
 DEFAULT_DAYS_BACK = 5
 FIRE_COLLECTION = 'FIRMS'  
-# --- MODIFIED: Added MODIS LST collection for background thermal map ---
 LST_COLLECTION = 'MODIS/061/MOD11A1' 
 LANDCOVER_COLLECTION = 'ESA/WorldCover/v100/2020'
-gcp_project_id = 'certain-acre-482416-b7'
+GCP_PROJECT_ID = 'certain-acre-482416-b7'
+DEFAULT_BUFFER = 5000 # Default 5km buffer if user doesn't specify one
 
 def initialize_gee(credentials_path_arg):
-    global gcp_project_id
     try:
-        credentials_path = credentials_path_arg
-        if not credentials_path or not os.path.exists(credentials_path):
+        if not credentials_path_arg or not os.path.exists(credentials_path_arg):
             print(f"ERROR: Credentials file not found.", file=sys.stderr)
             return False
         
-        credentials = ee.ServiceAccountCredentials(None, key_file=credentials_path)
-        ee.Initialize(credentials=credentials, project=gcp_project_id, opt_url='https://earthengine-highvolume.googleapis.com')
+        # 2. UPDATED: Use modern Service Account Auth
+        credentials = service_account.Credentials.from_service_account_file(credentials_path_arg)
+        scoped_credentials = credentials.with_scopes(['https://www.googleapis.com/auth/earthengine'])
+        ee.Initialize(credentials=scoped_credentials, project=GCP_PROJECT_ID, opt_url='https://earthengine-highvolume.googleapis.com')
         return True
     except Exception as e:
         print(f"ERROR: GEE init failed: {e}", file=sys.stderr)
@@ -48,25 +50,25 @@ def get_fire_image_url(image, region_geometry, vis_params, label):
 
 def detect_active_fires(region_geometry, days_back):
     try:
-        # 1. Date Setup
+        # 3. UPDATED: Safe UTC Date handling
         now = datetime.datetime.now(datetime.timezone.utc)
         end_date = ee.Date(now)
         start_date = end_date.advance(-days_back, 'day')
 
-        # 2. Load FIRMS Collection
+        # Load Collection
         dataset = ee.ImageCollection(FIRE_COLLECTION) \
             .filterDate(start_date, end_date) \
             .filterBounds(region_geometry)
 
-        # 3. Mosaics (Max Value Composites)
+        # Mosaics
         temp_max = dataset.select('T21').max().clip(region_geometry)
         conf_max = dataset.select('confidence').max().clip(region_geometry)
 
-        # 4. Industrial Masking
+        # Industrial Masking
         wc = ee.Image(LANDCOVER_COLLECTION).select('Map')
         industrial_mask = wc.neq(50) 
 
-        # 5. Fire Detection Logic
+        # Fire Logic
         valid_fire_mask = conf_max.gt(90).Or(
             conf_max.gt(40).And(temp_max.gt(330.0))
         )
@@ -74,7 +76,7 @@ def detect_active_fires(region_geometry, days_back):
         final_mask = valid_fire_mask.And(industrial_mask)
         fire_clean = temp_max.updateMask(final_mask)
 
-        # 6. Count Hot Pixels
+        # Count Hot Pixels
         hot_pixels = fire_clean.gt(0).selfMask()
         stats = hot_pixels.reduceRegion(
             reducer=ee.Reducer.count(),
@@ -87,16 +89,15 @@ def detect_active_fires(region_geometry, days_back):
         
         print(f"UrbanFlow: Detected {pixel_count} verified fire pixels.", file=sys.stderr)
 
-        # --- INTELLIGENT VISUALIZATION ---
-        
+        # --- VISUALIZATION LOGIC ---
         if pixel_count > 0:
-            # SCENARIO A: Fire Detected -> Show the Fire Layer (Red/Yellow)
+            # SCENARIO A: Fire Found
             current_image_to_show = fire_clean
             vis_params = {
                 "min": 325, "max": 400, 
                 "palette": ['ff0000', 'ffa500', 'ffff00'] 
             }
-            # Historical Background (1 year ago)
+            
             hist_start = start_date.advance(-1, 'year')
             hist_end = end_date.advance(-1, 'year')
             
@@ -107,17 +108,14 @@ def detect_active_fires(region_geometry, days_back):
                 .mean() \
                 .clip(region_geometry) \
                 .multiply(0.02)
-            
-            # Use Thermal Palette for the "Before" image
             vis_params_hist = {
                 "min": 290, "max": 330, 
                 "palette": ['0000ff', '00ffff', '00ff00', 'ffff00', 'ff0000']
             }
             before_image_url = get_fire_image_url(hist_lst, region_geometry, vis_params_hist, "before")   
         else:
-            # SCENARIO B: No Fire -> Show MODIS Land Surface Temperature (Background)
+            # SCENARIO B: Safe (Show Thermal Map)
             safe_start_date = end_date.advance(-30, 'day')
-
             lst_dataset = ee.ImageCollection(LST_COLLECTION) \
                 .filterDate(safe_start_date, end_date) \
                 .filterBounds(region_geometry) \
@@ -145,48 +143,29 @@ def detect_active_fires(region_geometry, days_back):
             
             before_image_url = get_fire_image_url(hist_lst, region_geometry, vis_params, "before")
 
-        # Generate 'After' (Current) Image URL
         after_image_url = get_fire_image_url(current_image_to_show, region_geometry, vis_params, "after")
         
-        # 8. Fire Points List
         fires_list = []
         if pixel_count > 0:
-            # --- FIXED SECTION ---
-            # 1. Create an integer "label" band (value=1) to define the grouping
             grouping = fire_clean.gt(0).rename('label').int()
-            
-            # 2. Stack the Label + Temp + Lon/Lat
             input_image = grouping.addBands(fire_clean).addBands(ee.Image.pixelLonLat())
-
-            # 3. Run reduceToVectors on the integer Label band
             vectors = input_image.reduceToVectors(
                 geometry=region_geometry,
                 scale=1000, 
                 maxPixels=1e8,
-                reducer=ee.Reducer.mean(), # Averages Temp & Lat/Lon for each fire blob
+                reducer=ee.Reducer.mean(), 
                 bestEffort=True
             )
             
             features = vectors.getInfo()['features']
-            
-            # Limit list size in Python
             for feat in features[:50]: 
                 props = feat['properties']
-                # The reducer mean will be in 'mean' (if 1 band) or 'T21' depending on reducer output
-                # Usually simply 'mean' if reducing a specific band, but here we reduced multiple.
-                # However, since 'fire_clean' (T21) is the first added band after label, 
-                # GEE usually names the property 'mean' if only one extra band, 
-                # or 'T21' if names are preserved. Let's check 'T21' first, then 'mean'.
-                
-                # Note: reduceToVectors with multi-band reducer often produces properties like "mean", "mean_1", etc.
-                # To be safe, we'll try to get 'T21' (original name) or fallback to 'mean'.
                 temp_k = props.get('T21', props.get('mean', 0))
                 
                 intensity = "Moderate"
                 if temp_k > 350: intensity = "Severe"
                 elif temp_k < 330: intensity = "Smoldering"
 
-                # We can also get lat/lon from the reducer if we prefer, but geometry centroid is fine
                 coords = feat['geometry']['coordinates']
                 if len(coords) > 0 and isinstance(coords[0], list):
                     lat = coords[0][0][1]
@@ -220,7 +199,7 @@ def detect_active_fires(region_geometry, days_back):
         print(f"ERROR: Script Error: {e}", file=sys.stderr)
         return {"status": "error", "message": f"Script Error: {e}"}
 
-# --- MAIN ENTRY POINT ---
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(json.dumps({"status": "error", "message": "Missing credentials arg"}))
@@ -234,6 +213,10 @@ if __name__ == "__main__":
         geojson = params['geometry']
         days = int(params.get('days_back', DEFAULT_DAYS_BACK))
         region_id = params.get('region_id', 'unknown')
+        
+        # 4. UPDATED: Dynamic Buffer Parsing
+        buffer_radius = int(params.get('buffer_meters', DEFAULT_BUFFER))
+        
     except Exception as e:
         print(json.dumps({"status": "error", "message": f"Input Error: {e}"}))
         sys.exit(1)
@@ -247,7 +230,10 @@ if __name__ == "__main__":
         coords = geojson.get('coordinates')
         if g_type == 'Polygon': ee_geom = ee.Geometry.Polygon(coords)
         elif g_type == 'MultiPolygon': ee_geom = ee.Geometry.MultiPolygon(coords)
-        elif g_type == 'Point': ee_geom = ee.Geometry.Point(coords).buffer(10000)
+        
+        # 5. UPDATED: Apply the dynamic buffer here
+        elif g_type == 'Point': ee_geom = ee.Geometry.Point(coords).buffer(buffer_radius)
+        
         else: raise ValueError(f"Unknown Type: {g_type}")
     except Exception as e:
          print(json.dumps({"status": "error", "message": f"Geometry Error: {e}"}))
