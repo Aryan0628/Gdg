@@ -16,8 +16,7 @@ export async function generatefireReport(req, res) {
             regionGeoJson,
             regionId,
             threshold,
-            
-            bufferMeters 
+            bufferMeters
         } = req.body;
 
         
