@@ -16,8 +16,7 @@ export async function generateDeforestationReport(req, res) {
         const {
             regionGeoJson,
             regionId,
-            threshold,
-            bufferMeters 
+            threshold, 
         } = req.body;
         
         if (!regionGeoJson || !regionId) {
@@ -52,7 +51,6 @@ export async function generateDeforestationReport(req, res) {
                 regionId, 
                 credentialsPath, 
                 threshold,
-                bufferMeters
             );
 
             if (!deforestation_analysis_result) {
